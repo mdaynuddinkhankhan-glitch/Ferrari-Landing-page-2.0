@@ -82,8 +82,10 @@ import {
   KeyRound,
   Download,
   Database,
-  ShieldCheck
+  ShieldCheck,
+  Ruler
 } from 'lucide-react';
+import { SizeChartManager } from './SizeChartManager';
 import { SteadfastCourierSection } from './SteadfastCourierSection';
 import { ConversionSettingsSection } from './ConversionSettingsSection';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -96,7 +98,7 @@ interface AdminDashboardProps {
   onSettingsUpdate?: (newSettings: SiteSettings) => void;
 }
 
-type AdminTab = 'dashboard' | 'orders' | 'products' | 'content' | 'settings' | 'steadfast' | 'conversion';
+type AdminTab = 'dashboard' | 'orders' | 'products' | 'sizechart' | 'content' | 'settings' | 'steadfast' | 'conversion';
 
 const DEFAULT_INITIAL_ORDERS: OrderConfirmation[] = [];
 
@@ -164,6 +166,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newOrderColor, setNewOrderColor] = useState<'black' | 'white' | 'red' | 'pink'>('black');
   const [newOrderQty, setNewOrderQty] = useState(1);
   const [newOrderZone, setNewOrderZone] = useState<'inside_dhaka' | 'outside_dhaka'>('inside_dhaka');
+
+  // Configured sizes dynamically from Size Chart rows
+  const configuredSizes: string[] = React.useMemo(() => {
+    if (settings.sizeChartRows && Array.isArray(settings.sizeChartRows) && settings.sizeChartRows.length > 0) {
+      const list = settings.sizeChartRows
+        .map((r) => (typeof r.size === 'string' ? r.size.trim() : ''))
+        .filter(Boolean);
+      if (list.length > 0) return list;
+    }
+    return ['M', 'L', 'XL', 'XXL', '3XL', '4XL'];
+  }, [settings.sizeChartRows]);
 
   // Banner upload refs and helpers
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
@@ -1208,9 +1221,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       icon: Layers,
       badge: '৩টি কালার',
     },
+    sizechart: {
+      label: '📏 সাইজ চার্ট ও মাপ এডিটর',
+      subLabel: 'M, L, XL, XXL ইত্যাদি সাইজের মাপ, দৈর্ঘ্য ও ছবি',
+      icon: Ruler,
+      badge: `${settings.sizeChartRows?.length || 6}টি সাইজ`,
+    },
     content: {
       label: 'লেখা ও ব্যানার স্লাইডার',
-      subLabel: 'ব্যানার ফটো, হেডলাইন ও সাইজ চার্ট',
+      subLabel: 'ব্যানার ফটো, হেডলাইন ও সাইট কনটেন্ট',
       icon: FileText,
       badge: `${currentBanners.length} টি ব্যানার`,
     },
@@ -1275,7 +1294,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 সেকশনসমূহ (ক্লিক করে ঢুকুন)
               </p>
 
-              {(['dashboard', 'orders', 'steadfast', 'conversion', 'products', 'content', 'settings'] as AdminTab[]).map((tabKey) => {
+              {(['dashboard', 'orders', 'sizechart', 'products', 'content', 'steadfast', 'conversion', 'settings'] as AdminTab[]).map((tabKey) => {
                 const cfg = tabConfig[tabKey];
                 const Icon = cfg.icon;
                 const isActive = activeTab === tabKey;
@@ -1299,6 +1318,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-transform ${
                         isActive
                           ? 'bg-[#ff146b] text-white shadow-sm'
+                          : tabKey === 'sizechart'
+                          ? 'bg-pink-900/60 text-pink-300'
                           : tabKey === 'steadfast'
                           ? 'bg-emerald-800/60 text-emerald-300'
                           : tabKey === 'conversion'
@@ -1441,6 +1462,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Package className="w-3.5 h-3.5" />
                 <span>অর্ডার ({orders.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('sizechart')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeTab === 'sizechart'
+                    ? 'bg-[#ff146b] text-white shadow-xs'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-700/60'
+                }`}
+              >
+                <Ruler className="w-3.5 h-3.5" />
+                <span>সাইজ চার্ট</span>
               </button>
               <button
                 type="button"
@@ -1967,6 +2000,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>প্রোডাক্ট ছবি, স্টক ও দাম পরিবর্তন</span>
                       </div>
                       <ChevronRight className="w-3.5 h-3.5 text-neutral-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('sizechart')}
+                      className="w-full text-left p-2.5 rounded-xl hover:bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs font-bold text-neutral-800 cursor-pointer group bg-pink-50/40"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-pink-100 text-[#ff146b] flex items-center justify-center">
+                          <Ruler className="w-4 h-4" />
+                        </div>
+                        <span className="text-[#ff146b]">📏 সাইজ চার্ট ও মাপ পরিবর্তন</span>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-[#ff146b] group-hover:translate-x-0.5 transition-transform" />
                     </button>
 
                     <button
@@ -2498,7 +2545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="space-y-2">
                             <label className="block text-xs font-bold text-neutral-700">সাইজ নির্বাচন করুন:</label>
                             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                              {(["M", "L", "XL", "XXL", "3XL", "4XL"] as ShirtSize[]).map((sz) => (
+                              {configuredSizes.map((sz) => (
                                 <button
                                   key={sz}
                                   type="button"
@@ -3911,12 +3958,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onChange={(e) => setNewOrderSize(e.target.value as ShirtSize)}
                           className="w-full px-3 py-2 border border-neutral-200 rounded-xl outline-none bg-white text-sm"
                         >
-                          <option value="M">M (৩৮ ইঞ্চি)</option>
-                          <option value="L">L (৪০ ইঞ্চি)</option>
-                          <option value="XL">XL (৪২ ইঞ্চি)</option>
-                          <option value="XXL">XXL (৪৪ ইঞ্চি)</option>
-                          <option value="3XL">3XL (৪৬ ইঞ্চি)</option>
-                          <option value="4XL">4XL (৪৮ ইঞ্চি)</option>
+                          {configuredSizes.map((sz) => (
+                            <option key={sz} value={sz}>{sz}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -4418,11 +4462,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Size Chart & Special Commitment Notice Section */}
+            {/* Direct Size Chart Manager Shortcut Card */}
+            <div className="bg-gradient-to-r from-pink-50 via-pink-100/40 to-indigo-50 rounded-2xl p-5 border-2 border-pink-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#ff146b] text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/30">
+                  <Ruler className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
+                    <span>সাইজ চার্ট ও মাপ এডিটর (Size Chart Manager)</span>
+                    <span className="text-[10px] font-bold bg-[#ff146b] text-white px-2 py-0.5 rounded-full uppercase">
+                      সরাসরি এডিটর
+                    </span>
+                  </h3>
+                  <p className="text-xs text-neutral-600 mt-0.5">
+                    M, L, XL, XXL ইত্যাদি প্রতিটি সাইজের মাপ (বডি, কাঁধ ও ঝুল) এবং সাইজ চার্ট ছবি পরিবর্তন করতে এখানে ক্লিক করুন।
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('sizechart');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-4 py-2.5 bg-[#ff146b] hover:bg-[#e60055] text-white text-xs sm:text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              >
+                <Ruler className="w-4 h-4" />
+                <span>সাইজ চার্ট এডিট করুন</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Special Commitment Notice Section */}
             <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-xs space-y-4">
               <h2 className="text-lg font-bold text-neutral-900 mb-1 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-[#ff146b]" />
-                <span>সাইজ চার্ট ও বিশেষ বিনীত অনুরোধ এডিটর</span>
+                <span>সাইজ চার্ট শিরোনাম ও বিশেষ বিনীত অনুরোধ এডিটর</span>
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -4432,7 +4509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={settings.sizeChartTitle || 'সাইজ চার্ট (Size Chart)'}
+                    value={settings.sizeChartTitle || 'সাইজ চার্ট (Ferrari Jacket Size Chart)'}
                     onChange={(e) => setSettings({ ...settings, sizeChartTitle: e.target.value })}
                     className="w-full px-3 py-2 text-sm bg-neutral-50 border border-neutral-300 rounded-xl outline-none focus:bg-white focus:border-[#ff146b]"
                   />
@@ -4605,6 +4682,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {/* ======================= TAB: SIZE CHART MANAGER ======================= */}
+        {activeTab === 'sizechart' && (
+          <SizeChartManager
+            settings={settings}
+            onUpdateSettings={async (newSettings) => {
+              setSettings(newSettings);
+              const res = await saveStoredSettings(newSettings);
+              if (res.success) {
+                if (onSettingsUpdate) onSettingsUpdate(newSettings);
+                showSuccessBanner(res.warning || 'সাইজ চার্ট সফলভাবে সেভ হয়েছে এবং ওয়েবসাইটে লাইভ হয়েছে! 🎉');
+              } else {
+                showErrorBanner(`সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
+              }
+            }}
+            showSuccessBanner={showSuccessBanner}
+            showErrorBanner={showErrorBanner}
+          />
         )}
 
         {/* ======================= TAB 4: DELIVERY & WHATSAPP SETTINGS ======================= */}

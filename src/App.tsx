@@ -287,6 +287,9 @@ export default function App() {
         <SizeChart
           title={siteSettings.sizeChartTitle}
           subtitle={siteSettings.sizeChartSubtitle}
+          rows={siteSettings.sizeChartRows}
+          image={siteSettings.sizeChartImage}
+          displayMode={siteSettings.sizeChartDisplayMode}
         />
 
         {/* Commitment & Anti-Fake Order Notice (Placed right below Size Chart as requested) */}
@@ -319,6 +322,7 @@ export default function App() {
           deliveryOutsideDhakaCost={siteSettings.deliveryOutsideDhakaCost}
           isFreeDeliveryEnabled={siteSettings.isFreeDeliveryEnabled}
           freeDeliveryText={siteSettings.freeDeliveryText}
+          sizeChartRows={siteSettings.sizeChartRows}
           selectedColors={selectedColors}
           colorQuantities={colorQuantities}
           selectedSize={selectedSize}

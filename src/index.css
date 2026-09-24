@@ -100,6 +100,78 @@ img {
   animation: submitEntrance 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ==========================================================================
+   Porshibari.shop Image Protection & Watermarking System
+   ========================================================================== */
+
+.pb-protected-container {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.pb-protected-container img,
+img.pb-protected-image {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.pb-watermark-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none !important;
+  z-index: 20;
+  background-repeat: repeat;
+  background-position: center center;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.pb-image-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Security notice toast on unauthorized right-click */
+.pb-protection-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: rgba(18, 18, 18, 0.95);
+  border: 1px solid rgba(255, 20, 107, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 10px 18px;
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(255, 20, 107, 0.3);
+  z-index: 999999;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+}
+
+.pb-protection-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+/* Ensures watermark stays clear even when page is printed or exported */
+@media print {
+  .pb-watermark-overlay {
+    opacity: 0.35 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 
 
 

@@ -3,6 +3,7 @@ import blackImg from '../assets/images/ferrari_jacket_black_1790107270989.jpg';
 import whiteImg from '../assets/images/ferrari_jacket_white_1790107289257.jpg';
 import redImg from '../assets/images/ferrari_jacket_red_1790107301729.jpg';
 import bannerImg from '../assets/images/ferrari_jacket_banner_1790107323198.jpg';
+import sizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import {
   db,
@@ -11,6 +12,24 @@ import {
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
 import { compressDataUrl } from './imageCompressor';
+
+export interface SizeChartRowItem {
+  id?: string;
+  size: string;
+  chest: string;
+  shoulder: string;
+  length: string;
+  sleeveLength?: string;
+}
+
+export const DEFAULT_SIZE_CHART_ROWS: SizeChartRowItem[] = [
+  { size: 'M', chest: '40', shoulder: '17.5', length: '27' },
+  { size: 'L', chest: '42', shoulder: '18.5', length: '28' },
+  { size: 'XL', chest: '44', shoulder: '19.5', length: '29' },
+  { size: 'XXL', chest: '46', shoulder: '20.5', length: '30' },
+  { size: '3XL', chest: '48', shoulder: '21.5', length: '31' },
+  { size: '4XL', chest: '50', shoulder: '22.5', length: '32' },
+];
 
 export interface SiteSettings {
   brandNamePart1: string;
@@ -29,6 +48,9 @@ export interface SiteSettings {
   colorsRowText?: string;
   sizeChartTitle?: string;
   sizeChartSubtitle?: string;
+  sizeChartRows?: SizeChartRowItem[];
+  sizeChartImage?: string;
+  sizeChartDisplayMode?: 'table' | 'image' | 'both';
   commitmentBadge?: string;
   commitmentDescription?: string;
   commitmentPillText?: string;
@@ -55,6 +77,11 @@ export interface SiteSettings {
   ttPixelId?: string;
   ttAccessToken?: string;
   ttTestEventCode?: string;
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  watermarkPreventRightClick?: boolean;
+  watermarkPreventDrag?: boolean;
+  watermarkDiagonalRepeat?: boolean;
   products: ShirtProduct[];
   updatedAt?: string;
 }
@@ -66,6 +93,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   heroHighlight: 'Ferrari Jacket কালেকশন',
   heroBannerImg: bannerImg,
   heroBanners: [bannerImg],
+  watermarkText: 'Porshibari.shop',
+  watermarkOpacity: 0.20,
+  watermarkPreventRightClick: true,
+  watermarkPreventDrag: true,
+  watermarkDiagonalRepeat: true,
   ctaButtonText: '🛍️ অর্ডার করতে চাই',
   infoBadge: 'প্রিমিয়াম উইন্ডপ্রুফ ফেব্রিক ও নিখুঁত ফিনিশিং',
   infoDescription:
@@ -80,6 +112,9 @@ Ferrari Jacket টি।`,
   colorsRowText: 'Color : Black, White, Red',
   sizeChartTitle: 'সাইজ চার্ট (Ferrari Jacket Size Chart)',
   sizeChartSubtitle: 'আপনার সঠিক মাপ দেখে নিচে অর্ডার ফর্মে সাইজ সিলেক্ট করুন (সব মাপ ইঞ্চিতে)',
+  sizeChartRows: DEFAULT_SIZE_CHART_ROWS,
+  sizeChartImage: sizeChartImg,
+  sizeChartDisplayMode: 'image',
   commitmentBadge: '⚠️ বিশেষ বিনীত অনুরোধ',
   commitmentDescription:
     'দয়া করে কেউ ফেইক বা অপ্রয়োজনীয় অর্ডার করবেন না। আপনার একটি ফেক অর্ডারের কারণে ডেলিভারি চার্জ ও প্যাকিংয়ে আমাদের আর্থিক ক্ষতি হয়। পণ্যটি ১০০% পছন্দ হলে এবং ডেলিভারি নেওয়ার নিশ্চয়তা থাকলেই অর্ডার করুন। আমরা সর্বোচ্চ আন্তরিকতার সাথে ১০০% প্রিমিয়াম কোয়ালিটি ও সাইজের নিশ্চয়তা দিচ্ছি।',
@@ -226,6 +261,12 @@ export function sanitizeAndMergeSettings(parsed: any): SiteSettings {
       sanitizedProducts.length > 0
         ? sanitizedProducts
         : DEFAULT_SITE_SETTINGS.products,
+    sizeChartRows:
+      Array.isArray(parsed.sizeChartRows) && parsed.sizeChartRows.length > 0
+        ? parsed.sizeChartRows
+        : DEFAULT_SITE_SETTINGS.sizeChartRows,
+    sizeChartImage: parsed.sizeChartImage !== undefined ? parsed.sizeChartImage : DEFAULT_SITE_SETTINGS.sizeChartImage,
+    sizeChartDisplayMode: parsed.sizeChartDisplayMode || DEFAULT_SITE_SETTINGS.sizeChartDisplayMode,
   };
 }
 
@@ -295,6 +336,10 @@ export async function prepareCompressedSettings(
     heroBannerImg: compressedBanners[0] || settings.heroBannerImg,
     heroBanners: compressedBanners.length > 0 ? compressedBanners : settings.heroBanners,
     products: compressedProducts,
+    sizeChartImage:
+      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image')
+        ? await compressDataUrl(settings.sizeChartImage, 1600, 0.88, false)
+        : settings.sizeChartImage,
   };
 }
 

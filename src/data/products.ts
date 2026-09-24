@@ -44,16 +44,16 @@ export interface SizeChartRow {
   chest: string;
   shoulder: string;
   length: string;
-  sleeveLength: string;
+  sleeveLength?: string;
 }
 
 export const SIZE_CHART: SizeChartRow[] = [
-  { size: 'M', chest: '40', shoulder: '17.5', length: '27', sleeveLength: '24' },
-  { size: 'L', chest: '42', shoulder: '18.5', length: '28', sleeveLength: '24.5' },
-  { size: 'XL', chest: '44', shoulder: '19.5', length: '29', sleeveLength: '25' },
-  { size: 'XXL', chest: '46', shoulder: '20.5', length: '30', sleeveLength: '25.5' },
-  { size: '3XL', chest: '48', shoulder: '21.5', length: '31', sleeveLength: '26' },
-  { size: '4XL', chest: '50', shoulder: '22.5', length: '32', sleeveLength: '26.5' },
+  { size: 'M', chest: '40', shoulder: '17.5', length: '27' },
+  { size: 'L', chest: '42', shoulder: '18.5', length: '28' },
+  { size: 'XL', chest: '44', shoulder: '19.5', length: '29' },
+  { size: 'XXL', chest: '46', shoulder: '20.5', length: '30' },
+  { size: '3XL', chest: '48', shoulder: '21.5', length: '31' },
+  { size: '4XL', chest: '50', shoulder: '22.5', length: '32' },
 ];
 
 export const WHATSAPP_NUMBER = '8801673154851';

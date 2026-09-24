@@ -1,113 +1,95 @@
-import React from 'react';
-import { SIZE_CHART } from '../data/products';
-import { Ruler } from 'lucide-react';
+import React, { useState } from 'react';
+import { Ruler, ZoomIn, X } from 'lucide-react';
+import defaultSizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
 
 interface SizeChartProps {
   title?: string;
   subtitle?: string;
+  image?: string;
+  displayMode?: string;
+  rows?: any[];
 }
 
 export const SizeChart: React.FC<SizeChartProps> = ({
-  title = 'সাইজ চার্ট (Size Chart)',
+  title = 'সাইজ চার্ট (Ferrari Jacket Size Chart)',
   subtitle = 'আপনার সঠিক মাপ দেখে নিচে অর্ডার ফর্মে সাইজ সিলেক্ট করুন (সব মাপ ইঞ্চিতে)',
+  image,
 }) => {
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const displayImage = image && image.trim() ? image : defaultSizeChartImg;
+
   return (
     <section className="mx-2 sm:mx-4 mb-6">
-      {/* Title */}
-      <div className="flex items-center justify-center gap-1.5 mb-1.5 text-center">
+      {/* Title Header */}
+      <div className="flex items-center justify-center gap-1.5 mb-1 text-center">
         <Ruler className="w-4 h-4 text-pink-400" />
         <h3 className="font-['Baloo_Da_2'] text-xl sm:text-2xl font-bold text-white">
           {title}
         </h3>
       </div>
-      <p className="text-center text-neutral-400 text-[11px] sm:text-xs mb-3">
-        {subtitle}
-      </p>
+      {subtitle && (
+        <p className="text-center text-neutral-400 text-[11px] sm:text-xs mb-3">
+          {subtitle}
+        </p>
+      )}
 
-      {/* Compact Size Chart Card - perfectly fits 100% on mobile without horizontal scroll */}
-      <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-xl border border-slate-200">
-        <table className="w-full table-fixed border-collapse text-center">
-          {/* Header */}
-          <thead>
-            <tr className="bg-[#092247] text-white font-bold text-[10px] sm:text-xs md:text-sm uppercase tracking-tight">
-              <th className="w-[18%] py-2 sm:py-2.5 px-0.5 border-r border-[#153463]">
-                <span className="inline-block relative pb-0.5">
-                  SIZE
-                  <span className="block w-4 sm:w-5 h-[1.5px] bg-sky-400 mx-auto mt-0.5 rounded-full"></span>
-                </span>
-              </th>
-              <th className="w-[19%] py-2 sm:py-2.5 px-0.5 border-r border-[#153463]">
-                <span className="inline-block relative pb-0.5">
-                  CHEST
-                  <span className="block w-4 sm:w-5 h-[1.5px] bg-sky-400 mx-auto mt-0.5 rounded-full"></span>
-                </span>
-              </th>
-              <th className="w-[21%] py-2 sm:py-2.5 px-0.5 border-r border-[#153463]">
-                <span className="inline-block relative pb-0.5">
-                  SHOULDER
-                  <span className="block w-4 sm:w-5 h-[1.5px] bg-sky-400 mx-auto mt-0.5 rounded-full"></span>
-                </span>
-              </th>
-              <th className="w-[19%] py-2 sm:py-2.5 px-0.5 border-r border-[#153463]">
-                <span className="inline-block relative pb-0.5">
-                  LENGTH
-                  <span className="block w-4 sm:w-5 h-[1.5px] bg-sky-400 mx-auto mt-0.5 rounded-full"></span>
-                </span>
-              </th>
-              <th className="w-[23%] py-2 sm:py-2.5 px-0.5">
-                <span className="inline-block relative pb-0.5 leading-tight">
-                  <span className="block sm:inline">SLEEVE</span>{' '}
-                  <span className="block sm:inline">LENGTH</span>
-                  <span className="block w-4 sm:w-5 h-[1.5px] bg-sky-400 mx-auto mt-0.5 rounded-full"></span>
-                </span>
-              </th>
-            </tr>
-          </thead>
+      {/* Pure Size Chart Image Display (Digital Table Removed as Requested) */}
+      <div className="relative bg-neutral-900 rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-700 shadow-xl max-w-2xl mx-auto group">
+        <img
+          src={displayImage}
+          alt="Ferrari Jacket Size Chart"
+          className="w-full h-auto object-contain cursor-zoom-in max-h-[520px] mx-auto transition-transform duration-200 group-hover:scale-[1.01]"
+          onClick={() => setIsZoomOpen(true)}
+          loading="lazy"
+        />
 
-          {/* Rows - Compact vertical height */}
-          <tbody className="divide-y divide-[#d8e4f5]">
-            {SIZE_CHART.map((row, idx) => {
-              const isEven = idx % 2 === 1;
-
-              return (
-                <tr
-                  key={row.size}
-                  className={isEven ? 'bg-[#f4f8ff]' : 'bg-white'}
-                >
-                  {/* Size Pill */}
-                  <td className="py-1.5 sm:py-2 px-0.5 sm:px-1 border-r border-[#d8e4f5]">
-                    <div className="flex items-center justify-center">
-                      <span className="inline-block w-9 sm:w-12 py-0.5 rounded-md sm:rounded-lg font-extrabold text-xs sm:text-sm bg-[#092247] text-white shadow-xs">
-                        {row.size}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Chest */}
-                  <td className="py-1.5 sm:py-2 px-0.5 sm:px-1 text-[#092247] font-bold text-xs sm:text-sm md:text-base border-r border-[#d8e4f5]">
-                    {row.chest}
-                  </td>
-
-                  {/* Shoulder */}
-                  <td className="py-1.5 sm:py-2 px-0.5 sm:px-1 text-[#092247] font-bold text-xs sm:text-sm md:text-base border-r border-[#d8e4f5]">
-                    {row.shoulder}
-                  </td>
-
-                  {/* Length */}
-                  <td className="py-1.5 sm:py-2 px-0.5 sm:px-1 text-[#092247] font-bold text-xs sm:text-sm md:text-base border-r border-[#d8e4f5]">
-                    {row.length}
-                  </td>
-
-                  {/* Sleeve Length */}
-                  <td className="py-1.5 sm:py-2 px-0.5 sm:px-1 text-[#092247] font-bold text-xs sm:text-sm md:text-base">
-                    {row.sleeveLength}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {/* Floating Zoom Button */}
+        <button
+          type="button"
+          onClick={() => setIsZoomOpen(true)}
+          className="absolute bottom-2.5 right-2.5 bg-black/75 hover:bg-black/95 text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 backdrop-blur-xs border border-white/25 transition-all cursor-pointer shadow-lg active:scale-95"
+          title="বড় করে সাইজ চার্ট দেখুন"
+        >
+          <ZoomIn className="w-3.5 h-3.5 text-pink-400" />
+          <span>বড় করে দেখুন</span>
+        </button>
       </div>
+
+      {/* Lightbox / Zoom Modal */}
+      {isZoomOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setIsZoomOpen(false)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[95vh] w-full flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setIsZoomOpen(false)}
+              className="absolute -top-11 right-0 sm:top-2 sm:right-2 w-10 h-10 bg-neutral-800/90 hover:bg-[#ff146b] text-white rounded-full flex items-center justify-center border border-white/20 transition-all cursor-pointer shadow-xl z-20 active:scale-90"
+              title="বন্ধ করুন"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Enlarged Image */}
+            <div className="overflow-auto max-h-[88vh] rounded-xl border border-neutral-700 shadow-2xl bg-neutral-900">
+              <img
+                src={displayImage}
+                alt="Ferrari Jacket Size Chart Enlarged"
+                className="max-h-[85vh] w-auto max-w-full object-contain mx-auto"
+              />
+            </div>
+
+            <p className="text-neutral-400 text-xs mt-2 text-center">
+              ট্যাপ করে বা বাইরে ক্লিক করে বন্ধ করুন
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

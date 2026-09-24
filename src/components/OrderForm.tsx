@@ -5,7 +5,7 @@ import { formatTaka } from '../utils/bengali';
 import { CheckCircle, Truck, AlertCircle, ShoppingCart, Loader2 } from 'lucide-react';
 import { saveOrderToFirestore } from '../services/orderService';
 import { trackPurchase, trackInitiateCheckout } from '../utils/pixelTracking';
-import { getStoredSettings } from '../utils/siteSettings';
+import { getStoredSettings, SizeChartRowItem } from '../utils/siteSettings';
 
 interface OrderFormProps {
   products?: ShirtProduct[];
@@ -18,6 +18,7 @@ interface OrderFormProps {
   deliveryOutsideDhakaCost?: number;
   isFreeDeliveryEnabled?: boolean;
   freeDeliveryText?: string;
+  sizeChartRows?: SizeChartRowItem[];
   selectedColors: Record<ShirtColorId, boolean>;
   colorQuantities: Record<ShirtColorId, number>;
   selectedSize: ShirtSize;
@@ -37,6 +38,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   deliveryOutsideDhakaCost = 150,
   isFreeDeliveryEnabled = false,
   freeDeliveryText = 'সারা বাংলাদেশ হোম ডেলিভারি একদম ফ্রী',
+  sizeChartRows,
   selectedColors,
   colorQuantities,
   selectedSize,
@@ -95,6 +97,24 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       }
     }, 50);
   };
+
+  // Dynamically derive available sizes from size chart rows (admin configurable)
+  const availableSizes: string[] = React.useMemo(() => {
+    if (sizeChartRows && Array.isArray(sizeChartRows) && sizeChartRows.length > 0) {
+      const list = sizeChartRows
+        .map((r) => (typeof r.size === 'string' ? r.size.trim() : ''))
+        .filter(Boolean);
+      if (list.length > 0) return list;
+    }
+    return ['M', 'L', 'XL', 'XXL', '3XL', '4XL'];
+  }, [sizeChartRows]);
+
+  // Ensure selectedSize is valid when availableSizes changes
+  useEffect(() => {
+    if (availableSizes.length > 0 && !availableSizes.includes(selectedSize)) {
+      onSelectSize(availableSizes[0]);
+    }
+  }, [availableSizes, selectedSize, onSelectSize]);
 
   // Selected products array
   const activeProducts = products.filter((p) => selectedColors[p.id]);
@@ -443,14 +463,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             />
           </div>
 
-          {/* Size Options (Vertical layout matching the uploaded screenshot) */}
+          {/* Size Options (Vertical layout matching the uploaded screenshot, dynamically linked with Size Chart) */}
           <div className="mb-5">
             <label className="block text-lg sm:text-xl font-bold mb-2.5 text-[#075f58]">
               কোন সাইজ নিবেন (সিলেক্ট করুন)<span className="text-red-500">*</span>
             </label>
 
             <div className="flex flex-col space-y-1 pl-1">
-              {(['M', 'L', 'XL', 'XXL', '3XL', '4XL'] as ShirtSize[]).map((size) => {
+              {availableSizes.map((size) => {
                 const isSelected = selectedSize === size;
                 return (
                   <label
