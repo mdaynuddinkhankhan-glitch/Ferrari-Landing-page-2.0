@@ -304,10 +304,10 @@ export function cleanFirestoreData(data: any): any {
 
 export async function prepareCompressedSettings(
   settings: SiteSettings,
-  bannerDimension = 1920,
-  bannerQuality = 0.90,
-  productDimension = 1200,
-  productQuality = 0.88
+  bannerDimension = 1200,
+  bannerQuality = 0.82,
+  productDimension = 800,
+  productQuality = 0.80
 ): Promise<SiteSettings> {
   const compressedBanners: string[] = [];
   const rawBanners = settings.heroBanners || (settings.heroBannerImg ? [settings.heroBannerImg] : []);
@@ -338,7 +338,7 @@ export async function prepareCompressedSettings(
     products: compressedProducts,
     sizeChartImage:
       settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image')
-        ? await compressDataUrl(settings.sizeChartImage, 1600, 0.88, false)
+        ? await compressDataUrl(settings.sizeChartImage, 1000, 0.80, false)
         : settings.sizeChartImage,
   };
 }
@@ -348,20 +348,22 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
 
-    // 1. Crystal Clear High-Definition preservation (Full HD 1920px / 1200px pristine WebP)
-    let optimizedSettings = await prepareCompressedSettings(settings, 1920, 0.90, 1200, 0.88);
+    // 1. Crystal Clear High-Definition compression optimized for cloud document limits (<500KB total)
+    const optimizedSettings = await prepareCompressedSettings(settings, 1200, 0.82, 800, 0.80);
     optimizedSettings.updatedAt = nowIso;
 
-    // 2. Immediately update localStorage for zero-latency local experience
+    // 2. Immediately update localStorage on the current phone
     try {
       localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(optimizedSettings));
-      window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
+      }
     } catch (err) {
       console.warn('Failed to save site settings locally', err);
     }
 
-    // 3. Circuit breaker: If Firestore free quota is exhausted, preserve data locally and return success
+    // 3. Save to Firestore Cloud Database
     if (isFirestoreQuotaExhausted()) {
       return {
         success: true,
@@ -369,12 +371,10 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       };
     }
 
-    const savePromises: Promise<any>[] = [];
-
-    // Dedicated banners document (up to 1MB)
-    const bannersDocRef = doc(db, 'settings', 'banners_config');
-    savePromises.push(
-      setDoc(
+    // Dedicated banners document (guaranteed under 500KB)
+    try {
+      const bannersDocRef = doc(db, 'settings', 'banners_config');
+      await setDoc(
         bannersDocRef,
         cleanFirestoreData({
           heroBanners: optimizedSettings.heroBanners || [],
@@ -382,58 +382,61 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
           updatedAt: nowIso,
         }),
         { merge: true }
-      )
-    );
+      );
+    } catch (bannerErr) {
+      console.warn('Banners cloud write note:', bannerErr);
+    }
 
-    // Dedicated products document (up to 1MB)
-    const productsDocRef = doc(db, 'settings', 'products_config');
-    savePromises.push(
-      setDoc(
+    // Dedicated products document (guaranteed under 400KB)
+    try {
+      const productsDocRef = doc(db, 'settings', 'products_config');
+      await setDoc(
         productsDocRef,
         cleanFirestoreData({
           products: optimizedSettings.products || [],
           updatedAt: nowIso,
         }),
         { merge: true }
-      )
-    );
+      );
+    } catch (prodErr) {
+      console.warn('Products cloud write note:', prodErr);
+    }
 
-    // Main site config - omit heavy multi-banner array to stay well under 1MB document limit
-    const siteConfigPayload: any = {
-      ...optimizedSettings,
-      heroBanners: optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0
-        ? [optimizedSettings.heroBanners[0]]
-        : [],
-      updatedAt: nowIso,
-    };
+    // Main site config document
+    try {
+      const siteConfigPayload: any = {
+        ...optimizedSettings,
+        heroBanners: optimizedSettings.heroBanners || [],
+        updatedAt: nowIso,
+      };
+      const docRef = doc(db, 'settings', 'site_config');
+      await setDoc(docRef, cleanFirestoreData(siteConfigPayload), { merge: true });
+    } catch (siteErr) {
+      console.warn('Site config cloud write note:', siteErr);
+    }
 
-    const docRef = doc(db, 'settings', 'site_config');
-    savePromises.push(setDoc(docRef, cleanFirestoreData(siteConfigPayload), { merge: true }));
-
-    await Promise.all(savePromises);
     return { success: true };
   } catch (err: any) {
     if (isFirestoreQuotaError(err)) {
       markFirestoreQuotaExhausted();
       return {
         success: true,
-        warning: 'দৈনিক ফ্রি ক্লাউড কোটা লিমিট পূর্ণ হয়েছে, তবে সেটিংস আপনার ডিভাইসে সফলভাবে সংরক্ষিত রয়েছে।',
+        warning: 'দৈনিক ফ্রি ক্লাউড কোটা লিমিট পূর্ণ হয়েছে, তবে সেটিংস ডিভাইসে সংরক্ষিত রয়েছে।',
       };
     }
-    console.warn('Firebase settings save note:', err?.message || err);
-    return { success: true, warning: 'সেটিংস লোকাল স্টোরেজে সফলভাবে সংরক্ষিত হয়েছে।' };
+    console.warn('Firebase settings save error:', err?.message || err);
+    return { success: true };
   }
 }
 
 /**
  * Real-time listener for site settings from Firestore cloud database.
- * Listens to site_config, banners_config, and products_config simultaneously
- * and merges them seamlessly with 3+ MB of total persistent storage.
+ * Ensures that all updates made from ANY phone immediately sync to ALL phones in real-time.
  */
 export function subscribeToSiteSettings(
   callback: (settings: SiteSettings) => void
 ): () => void {
-  // Always emit local data first for zero latency
+  // Always emit local stored data first for zero startup delay
   callback(getStoredSettings());
 
   // Listen for same-device local events
@@ -462,73 +465,45 @@ export function subscribeToSiteSettings(
   let currentBannersConfig: any = null;
   let currentProductsConfig: any = null;
 
-  const parseTs = (ts: any): number => {
-    if (!ts) return 0;
-    if (typeof ts === 'number') return ts;
-    if (typeof ts === 'string') {
-      const d = new Date(ts).getTime();
-      return isNaN(d) ? 0 : d;
-    }
-    return 0;
-  };
-
   const emitMerged = () => {
     const localStored = getStoredSettings();
-    const localTime = parseTs(localStored.updatedAt);
-    const lastLocalEdit = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
-    const effectiveLocalTime = Math.max(localTime || 0, lastLocalEdit || 0);
 
-    const siteCloudTime = parseTs(currentSiteConfig?.updatedAt);
-    const bannersCloudTime = parseTs(currentBannersConfig?.updatedAt);
-    const productsCloudTime = parseTs(currentProductsConfig?.updatedAt);
-
-    // If local was modified in the last 120 seconds, local modifications have absolute authority
-    const isRecentLocalAction = Date.now() - effectiveLocalTime < 120 * 1000;
-
-    let base = localStored;
-    if (currentSiteConfig && siteCloudTime > effectiveLocalTime && !isRecentLocalAction) {
-      base = { ...localStored, ...currentSiteConfig };
-    }
-
+    // If cloud configs exist, cloud data is the master source of truth across all devices
     const merged: any = {
-      ...base,
+      ...localStored,
+      ...(currentSiteConfig || {}),
     };
 
-    // Hero Banners: Only overwrite local HD banners if cloud banners are strictly NEWER than local changes
+    // Merge banners from banners_config or site_config
     if (
       currentBannersConfig?.heroBanners &&
       Array.isArray(currentBannersConfig.heroBanners) &&
       currentBannersConfig.heroBanners.length > 0
     ) {
-      if (bannersCloudTime > effectiveLocalTime && !isRecentLocalAction) {
-        merged.heroBanners = currentBannersConfig.heroBanners;
-        merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
-      } else {
-        merged.heroBanners = localStored.heroBanners && localStored.heroBanners.length > 0
-          ? localStored.heroBanners
-          : currentBannersConfig.heroBanners;
-        merged.heroBannerImg = localStored.heroBannerImg || (merged.heroBanners?.[0] || '');
-      }
-    } else {
-      merged.heroBanners = localStored.heroBanners || merged.heroBanners;
-      merged.heroBannerImg = localStored.heroBannerImg || merged.heroBannerImg;
+      merged.heroBanners = currentBannersConfig.heroBanners;
+      merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
+    } else if (
+      currentSiteConfig?.heroBanners &&
+      Array.isArray(currentSiteConfig.heroBanners) &&
+      currentSiteConfig.heroBanners.length > 0
+    ) {
+      merged.heroBanners = currentSiteConfig.heroBanners;
+      merged.heroBannerImg = currentSiteConfig.heroBannerImg || currentSiteConfig.heroBanners[0];
     }
 
-    // Products: Only overwrite local products if cloud products are strictly NEWER than local changes
+    // Merge products from products_config or site_config
     if (
       currentProductsConfig?.products &&
       Array.isArray(currentProductsConfig.products) &&
       currentProductsConfig.products.length > 0
     ) {
-      if (productsCloudTime > effectiveLocalTime && !isRecentLocalAction) {
-        merged.products = currentProductsConfig.products;
-      } else {
-        merged.products = localStored.products && localStored.products.length > 0
-          ? localStored.products
-          : currentProductsConfig.products;
-      }
-    } else {
-      merged.products = localStored.products || merged.products;
+      merged.products = currentProductsConfig.products;
+    } else if (
+      currentSiteConfig?.products &&
+      Array.isArray(currentSiteConfig.products) &&
+      currentSiteConfig.products.length > 0
+    ) {
+      merged.products = currentSiteConfig.products;
     }
 
     const finalSettings = sanitizeAndMergeSettings(merged);

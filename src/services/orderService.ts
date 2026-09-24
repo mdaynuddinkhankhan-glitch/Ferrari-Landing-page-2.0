@@ -17,7 +17,7 @@ import {
   isFirestoreQuotaError,
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
-import { OrderConfirmation } from '../types';
+import { OrderConfirmation, OrderedProductItem } from '../types';
 
 const ORDERS_COLLECTION = 'orders';
 const SETTINGS_COLLECTION = 'settings';
@@ -26,6 +26,27 @@ const STEADFAST_BOOKINGS_DOC = 'steadfast_bookings';
 const LOCAL_ORDERS_KEY = 'porshibari_orders';
 const PENDING_SYNC_KEY = 'porshibari_pending_sync_orders';
 const STEADFAST_BOOKINGS_KEY = 'porshibari_steadfast_bookings_v2';
+
+/**
+ * Universal deep data cleaner to prevent Firestore undefined errors
+ */
+export function cleanFirestoreData(data: any): any {
+  if (data === undefined) return null;
+  if (data === null) return null;
+  if (typeof data !== 'object') return data;
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => cleanFirestoreData(item))
+      .filter((item) => item !== undefined);
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      clean[key] = cleanFirestoreData(value);
+    }
+  }
+  return clean;
+}
 
 export function sanitizeOrderId(orderId: string): string {
   // Ensure valid document ID (alphanumeric, dash, underscore)
@@ -207,7 +228,7 @@ export async function syncPendingOrdersToFirestore(): Promise<void> {
       }
       try {
         const docId = sanitizeOrderId(order.orderId);
-        await setDoc(doc(db, ORDERS_COLLECTION, docId), order, { merge: true });
+        await setDoc(doc(db, ORDERS_COLLECTION, docId), cleanFirestoreData(order), { merge: true });
       } catch (err) {
         if (isFirestoreQuotaError(err)) {
           markFirestoreQuotaExhausted();
@@ -232,6 +253,17 @@ export async function syncPendingOrdersToFirestore(): Promise<void> {
 export async function saveOrderToFirestore(order: OrderConfirmation): Promise<void> {
   const docId = sanitizeOrderId(order.orderId);
 
+  // Clean and sanitize ordered items to prevent heavy payloads or undefined keys
+  const sanitizedOrderedItems: OrderedProductItem[] = Array.isArray(order.orderedItems)
+    ? order.orderedItems.map((item) => ({
+        id: String(item.id || ''),
+        name: String(item.name || ''),
+        colorName: String(item.colorName || ''),
+        price: Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
+      }))
+    : [];
+
   const payload: OrderConfirmation = {
     orderId: order.orderId || `#${docId}`,
     orderTime: order.orderTime || new Date().toLocaleString('bn-BD'),
@@ -247,7 +279,7 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<vo
     total: Number(order.total) || 0,
     status: order.status || 'Processing',
     createdAt: order.createdAt || new Date().toISOString(),
-    orderedItems: order.orderedItems,
+    orderedItems: sanitizedOrderedItems,
     ...(order.orderNotes ? { orderNotes: order.orderNotes } : {}),
     ...(order.steadfastSent === false
       ? { steadfastSent: false }
@@ -262,7 +294,9 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<vo
     ...(order.customerScore ? { customerScore: order.customerScore } : {}),
   };
 
-  // 1. Dual-tier local storage guarantee
+  const cleanedPayload = cleanFirestoreData(payload);
+
+  // 1. Dual-tier local storage guarantee on this device
   const localList = getLocalStoredOrders();
   const existingIdx = localList.findIndex((o) => o.orderId === payload.orderId || sanitizeOrderId(o.orderId) === docId);
   if (existingIdx >= 0) {
@@ -272,7 +306,7 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<vo
   }
   saveLocalStoredOrders(localList);
 
-  // 2. Cloud Firestore persistence
+  // 2. Cloud Firestore persistence (Ensures all admin phones see the order in real-time)
   if (isFirestoreQuotaExhausted()) {
     console.warn('Firestore quota paused, order saved securely locally.');
     queuePendingSync(payload);
@@ -280,7 +314,8 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<vo
   }
 
   try {
-    await setDoc(doc(db, ORDERS_COLLECTION, docId), payload, { merge: true });
+    const docRef = doc(db, ORDERS_COLLECTION, docId);
+    await setDoc(docRef, cleanedPayload, { merge: true });
   } catch (error) {
     if (isFirestoreQuotaError(error)) {
       markFirestoreQuotaExhausted();
@@ -327,11 +362,8 @@ export async function updateOrderInFirestore(
 
   try {
     const docRef = doc(db, ORDERS_COLLECTION, docId);
-    if (fullMergedOrder) {
-      await setDoc(docRef, fullMergedOrder, { merge: true });
-    } else {
-      await setDoc(docRef, updates as Record<string, unknown>, { merge: true });
-    }
+    const cleaned = cleanFirestoreData(fullMergedOrder || updates);
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     if (isFirestoreQuotaError(error)) {
       markFirestoreQuotaExhausted();
