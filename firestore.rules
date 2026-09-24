@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Orders Collection: Public checkout creation + multi-device order management
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Settings Collection: Dynamic store configuration (products, banners, pixels, visitor stats, courier config)
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
+

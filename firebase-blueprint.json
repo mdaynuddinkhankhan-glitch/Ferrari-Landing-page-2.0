@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "order": {
+      "title": "Order",
+      "description": "Customer order placed on Porshibari store",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "maxLength": 64 },
+        "orderTime": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 128 },
+        "customerPhone": { "type": "string", "maxLength": 32 },
+        "customerAddress": { "type": "string", "maxLength": 500 },
+        "size": { "type": "string", "maxLength": 16 },
+        "selectedColors": { "type": "object" },
+        "colorQuantities": { "type": "object" },
+        "shippingZone": { "type": "string", "maxLength": 32 },
+        "shippingCost": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "steadfastConsignmentId": { "type": "string", "maxLength": 64 },
+        "steadfastTrackingCode": { "type": "string", "maxLength": 64 },
+        "steadfastStatus": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["orderId", "customerName", "customerPhone", "customerAddress", "total", "status"]
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Store configuration, dynamic settings and visitor analytics",
+      "type": "object",
+      "properties": {
+        "brandNamePart1": { "type": "string", "maxLength": 64 },
+        "brandNamePart2": { "type": "string", "maxLength": 64 },
+        "whatsappNumber": { "type": "string", "maxLength": 32 },
+        "displayPhone": { "type": "string", "maxLength": 32 },
+        "deliveryInsideDhakaCost": { "type": "number" },
+        "deliveryOutsideDhakaCost": { "type": "number" },
+        "totalVisits": { "type": "number" },
+        "todayVisits": { "type": "number" },
+        "lastDate": { "type": "string", "maxLength": 32 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      }
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "order",
+      "description": "Customer orders collection"
+    },
+    "/settings/{settingId}": {
+      "schema": "settings",
+      "description": "Store dynamic configuration settings"
+    }
+  }
+}

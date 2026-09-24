@@ -1,0 +1,8 @@
+{
+  "name": "Porshibari Fashion House Ferrari v1",
+  "description": "Porshibari Fashion House - প্রিমিয়াম এবং ট্রেন্ডিং Ferrari Jacket কালেকশনের অনলাইন অর্ডার ও ক্যাশ অন হোম ডেলিভারি।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
