@@ -307,15 +307,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       console.warn('Pixel purchase tracking error:', pixelErr);
     }
 
-    // Persist order to Firebase Firestore cloud database
-    saveOrderToFirestore(confirmation)
-      .catch((err) => {
+    // Persist order to Firebase Firestore cloud database with smooth 1.5s loading
+    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 1500));
+
+    Promise.all([
+      saveOrderToFirestore(confirmation).catch((err) => {
         console.warn('Firebase order save note:', err);
-      })
-      .finally(() => {
-        setIsSubmitting(false);
-        onOrderSuccess(confirmation);
-      });
+      }),
+      minLoadingTime,
+    ]).finally(() => {
+      setIsSubmitting(false);
+      onOrderSuccess(confirmation);
+    });
   };
 
   return (
@@ -580,15 +583,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               <h3 className="text-lg sm:text-xl font-bold text-[#075f58]">
                 আপনার অর্ডার
               </h3>
-              {activeProducts.length > 0 && (
-                <button
-                  type="button"
-                  onClick={onScrollToColors}
-                  className="text-xs font-semibold text-emerald-700 underline hover:text-emerald-900 cursor-pointer"
-                >
-                  কালার পরিবর্তন করুন
-                </button>
-              )}
             </div>
 
             {/* Table Header: Product ......... Subtotal */}

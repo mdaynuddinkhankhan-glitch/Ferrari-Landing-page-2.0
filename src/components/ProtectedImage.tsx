@@ -56,11 +56,13 @@ export const ProtectedImage: React.FC<ProtectedImageProps> = ({
         className={`block transition-all duration-300 ${
           isLoaded ? 'opacity-100' : 'opacity-90'
         } ${className}`}
-        style={{
-          WebkitUserDrag: 'none',
-          userSelect: 'none',
-          pointerEvents: 'auto',
-        }}
+        style={
+          {
+            WebkitUserDrag: 'none',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          } as React.CSSProperties
+        }
         {...restProps}
       />
 

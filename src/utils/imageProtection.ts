@@ -118,7 +118,7 @@ export function protectImageElement(imgElement: HTMLImageElement, config: Waterm
   // Mark element as protected
   imgElement.dataset.pbProtected = 'true';
   imgElement.setAttribute('draggable', 'false');
-  imgElement.style.webkitUserDrag = 'none';
+  (imgElement.style as any).webkitUserDrag = 'none';
   imgElement.style.userSelect = 'none';
 
   // Prevent right-click context menu on image
