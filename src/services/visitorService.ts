@@ -1,4 +1,4 @@
-import { doc, setDoc, onSnapshot, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, increment } from 'firebase/firestore';
 import {
   db,
   isFirestoreQuotaExhausted,
@@ -10,6 +10,11 @@ const SETTINGS_COLLECTION = 'settings';
 const VISITOR_DOC_ID = 'visitor_stats';
 const LOCAL_STORAGE_KEY = 'fz_porshibari_real_visitor_stats';
 
+// Persistent storage keys for strict 1 Phone = 1 Unique Visitor counting
+const DEVICE_ID_KEY = 'porshibari_unique_device_uuid';
+const DEVICE_COUNTED_ALLTIME_KEY = 'porshibari_device_counted_alltime';
+const DEVICE_LAST_VISIT_DATE_KEY = 'porshibari_device_last_visit_date';
+
 export interface VisitorStats {
   totalVisits: number;
   todayVisits: number;
@@ -18,6 +23,42 @@ export interface VisitorStats {
 
 function getTodayString(): string {
   return new Date().toISOString().split('T')[0];
+}
+
+// Cookie helpers to ensure device persistence across private tabs or localStorage resets
+function getCookie(name: string): string | null {
+  try {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCookie(name: string, value: string, days = 365 * 5): void {
+  try {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Get or create a persistent Unique Device ID for this phone/device
+ */
+export function getOrCreateDeviceId(): string {
+  try {
+    let devId = localStorage.getItem(DEVICE_ID_KEY) || getCookie(DEVICE_ID_KEY);
+    if (!devId) {
+      devId = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem(DEVICE_ID_KEY, devId);
+      setCookie(DEVICE_ID_KEY, devId);
+    }
+    return devId;
+  } catch {
+    return 'dev_' + Date.now().toString(36);
+  }
 }
 
 export function getLocalVisitorStats(): VisitorStats {
@@ -53,38 +94,111 @@ export function saveLocalVisitorStats(stats: VisitorStats): void {
 }
 
 /**
- * Record an actual real website visit when someone visits the store.
- * Counts once per browser session per visitor.
+ * Record an actual real website visit from a unique phone/device.
+ * Strict Rule: One phone/device is counted only ONCE for Total Visits,
+ * and only ONCE per day for Today's Visits (no increments on refresh/revisit).
  */
 export async function recordWebsiteVisit(): Promise<VisitorStats> {
   const today = getTodayString();
 
-  let isSessionCounted = false;
-  try {
-    isSessionCounted = sessionStorage.getItem('fz_real_visit_counted') === 'true';
-  } catch {
-    // ignore
-  }
+  // Ensure persistent device ID is set
+  getOrCreateDeviceId();
 
-  // If this session has already been counted, do not count again
-  if (isSessionCounted) {
+  // Check if this phone/device has ever been counted for Total Visits
+  const hasCountedAlltime = 
+    localStorage.getItem(DEVICE_COUNTED_ALLTIME_KEY) === 'true' || 
+    getCookie(DEVICE_COUNTED_ALLTIME_KEY) === 'true';
+
+  // Check if this phone/device has already been counted today
+  const lastVisitDate = 
+    localStorage.getItem(DEVICE_LAST_VISIT_DATE_KEY) || 
+    getCookie(DEVICE_LAST_VISIT_DATE_KEY);
+
+  const hasCountedToday = lastVisitDate === today;
+
+  // If this phone is already counted for today AND all-time, do NOT count again
+  if (hasCountedAlltime && hasCountedToday) {
     return getLocalVisitorStats();
   }
 
+  // Determine what needs to be incremented
+  const shouldIncrementTotal = !hasCountedAlltime;
+  const shouldIncrementToday = !hasCountedToday;
+
+  // Immediately mark this phone/device in local storage and cookies so subsequent reloads never re-count
   try {
-    sessionStorage.setItem('fz_real_visit_counted', 'true');
+    localStorage.setItem(DEVICE_COUNTED_ALLTIME_KEY, 'true');
+    localStorage.setItem(DEVICE_LAST_VISIT_DATE_KEY, today);
+    setCookie(DEVICE_COUNTED_ALLTIME_KEY, 'true');
+    setCookie(DEVICE_LAST_VISIT_DATE_KEY, today);
   } catch {
     // ignore
   }
 
+  // Update local stats cache for fast UI
   const current = getLocalVisitorStats();
   const isSameDay = current.lastDate === today;
   const newStats: VisitorStats = {
-    totalVisits: (current.totalVisits >= 4500 ? 0 : current.totalVisits) + 1,
-    todayVisits: isSameDay ? (current.todayVisits || 0) + 1 : 1,
+    totalVisits: (current.totalVisits >= 4500 ? 0 : current.totalVisits) + (shouldIncrementTotal ? 1 : 0),
+    todayVisits: isSameDay
+      ? (current.todayVisits || 0) + (shouldIncrementToday ? 1 : 0)
+      : 1,
     lastDate: today,
   };
   saveLocalVisitorStats(newStats);
+
+  // Sync atomic update with Firestore cloud database
+  if (!isFirestoreQuotaExhausted()) {
+    try {
+      const docRef = doc(db, SETTINGS_COLLECTION, VISITOR_DOC_ID);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const cloudData = docSnap.data();
+        const cloudLastDate = cloudData.lastDate || today;
+        const isCloudSameDay = cloudLastDate === today;
+
+        const updatePayload: Record<string, any> = {
+          lastDate: today,
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (shouldIncrementTotal) {
+          updatePayload.totalVisits = increment(1);
+        }
+
+        if (isCloudSameDay) {
+          if (shouldIncrementToday) {
+            updatePayload.todayVisits = increment(1);
+          }
+        } else {
+          // Date rolled over to new day
+          updatePayload.todayVisits = 1;
+        }
+
+        await setDoc(docRef, updatePayload, { merge: true });
+      } else {
+        // Initial Firestore document creation
+        await setDoc(
+          docRef,
+          {
+            totalVisits: 1,
+            todayVisits: 1,
+            lastDate: today,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+    } catch (error) {
+      if (isFirestoreQuotaError(error)) {
+        markFirestoreQuotaExhausted();
+      } else {
+        console.warn('Visitor tracking cloud sync note:', error);
+      }
+    }
+  }
+
   return newStats;
 }
 
@@ -135,7 +249,7 @@ export function subscribeVisitorStats(callback: (stats: VisitorStats) => void): 
         if (isFirestoreQuotaError(error)) {
           markFirestoreQuotaExhausted();
         }
-        console.warn('Visitor stats live subscription offline or error:', error.message);
+        console.warn('Visitor stats live subscription offline or error:', error);
       }
     );
     return unsubscribe;

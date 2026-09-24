@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ruler, ZoomIn, X } from 'lucide-react';
+import { Ruler, X } from 'lucide-react';
 import defaultSizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
 
 interface SizeChartProps {
@@ -33,7 +33,7 @@ export const SizeChart: React.FC<SizeChartProps> = ({
         </p>
       )}
 
-      {/* Pure Size Chart Image Display (Digital Table Removed as Requested) */}
+      {/* Pure Size Chart Image Display */}
       <div className="relative bg-neutral-900 rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-700 shadow-xl max-w-2xl mx-auto group">
         <img
           src={displayImage}
@@ -42,17 +42,6 @@ export const SizeChart: React.FC<SizeChartProps> = ({
           onClick={() => setIsZoomOpen(true)}
           loading="lazy"
         />
-
-        {/* Floating Zoom Button */}
-        <button
-          type="button"
-          onClick={() => setIsZoomOpen(true)}
-          className="absolute bottom-2.5 right-2.5 bg-black/75 hover:bg-black/95 text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 backdrop-blur-xs border border-white/25 transition-all cursor-pointer shadow-lg active:scale-95"
-          title="বড় করে সাইজ চার্ট দেখুন"
-        >
-          <ZoomIn className="w-3.5 h-3.5 text-pink-400" />
-          <span>বড় করে দেখুন</span>
-        </button>
       </div>
 
       {/* Lightbox / Zoom Modal */}

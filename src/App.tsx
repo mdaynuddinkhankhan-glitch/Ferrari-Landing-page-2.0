@@ -64,7 +64,10 @@ export default function App() {
       const search = window.location.search.toLowerCase();
       return (
         path.startsWith('/admin') ||
+        path.endsWith('/admin') ||
         hash.startsWith('#/admin') ||
+        hash.startsWith('#admin') ||
+        hash.includes('admin') ||
         search.includes('admin=true') ||
         search.includes('admin=1') ||
         search === '?admin'
@@ -101,11 +104,25 @@ export default function App() {
 
   const navigateToStore = () => {
     try {
-      window.history.pushState({}, '', '/');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('admin');
+      if (url.pathname.endsWith('/admin') || url.pathname === '/admin') {
+        url.pathname = url.pathname.replace(/\/admin\/?$/, '') || '/';
+      }
+      if (url.hash.includes('admin')) {
+        url.hash = '';
+      }
+      const cleanUrl = (url.pathname || '/') + (url.search ? url.search : '') + (url.hash ? url.hash : '');
+      window.history.pushState({}, '', cleanUrl || '/');
     } catch {
-      window.location.hash = '';
+      try {
+        window.history.pushState({}, '', '/');
+      } catch {
+        window.location.hash = '';
+      }
     }
     setIsAdminPath(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAdminLoginSuccess = () => {

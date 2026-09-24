@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import defaultBannerImg from '../assets/images/porshibari_collection_banner_1788721457342.jpg';
 import { AnimatedCtaButton } from './AnimatedCtaButton';
 
@@ -22,19 +22,46 @@ export const Hero: React.FC<HeroProps> = ({
   // Use banners list or fallback to single banner
   const bannerList = banners && banners.length > 0 ? banners : [bannerImg];
   const [currentIndex, setCurrentIndex] = useState(0);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchEndXRef = useRef<number | null>(null);
 
-  // Auto slide every 4 seconds if there are multiple banners
+  // Auto slide every 3.5 seconds: current slides left, next slides in from right
   useEffect(() => {
     if (bannerList.length <= 1) return;
 
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % bannerList.length);
-    }, 4000);
+    }, 3500);
 
     return () => clearInterval(interval);
   }, [bannerList.length]);
 
-  const currentImage = bannerList[currentIndex] || bannerList[0] || defaultBannerImg;
+  // Touch Swipe Handlers for mobile gestures
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchEndXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartXRef.current === null || touchEndXRef.current === null) return;
+    const diff = touchStartXRef.current - touchEndXRef.current;
+    const swipeThreshold = 45; // Minimum px distance for swipe gesture
+
+    if (diff > swipeThreshold) {
+      // Swiped Left -> Next banner (slides from right to left)
+      setCurrentIndex((prev) => (prev + 1) % bannerList.length);
+    } else if (diff < -swipeThreshold) {
+      // Swiped Right -> Previous banner
+      setCurrentIndex((prev) => (prev - 1 + bannerList.length) % bannerList.length);
+    }
+
+    touchStartXRef.current = null;
+    touchEndXRef.current = null;
+  };
 
   return (
     <section className="relative mb-3">
@@ -45,40 +72,32 @@ export const Hero: React.FC<HeroProps> = ({
         </h2>
       </div>
 
-      {/* Hero Showcase Banner / Slider */}
+      {/* Hero Showcase Banner / Smooth Horizontal Slider */}
       <div className="px-3 sm:px-4 mt-5 sm:mt-6">
         <div
           onClick={onOrderClick}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           className="relative mx-auto w-[94%] max-w-[540px] rounded-[20px] overflow-hidden border-2 border-[#ff146b]/40 shadow-[0_8px_30px_rgba(255,20,107,0.25)] group cursor-pointer bg-neutral-900 select-none"
         >
-          {/* Banner Image */}
-          <img
-            key={currentIndex}
-            src={currentImage}
-            alt={`Ferrari Jacket Collection Banner ${currentIndex + 1}`}
-            className="w-full h-auto aspect-[4/3] sm:aspect-[16/10] object-cover transition-all duration-700 block animate-fadeIn"
-            referrerPolicy="no-referrer"
-          />
-
-          {/* Dot Indicators if multiple banners */}
-          {bannerList.length > 1 && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 bg-black/50 px-2.5 py-1 rounded-full backdrop-blur-xs border border-white/20">
-              {bannerList.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCurrentIndex(idx);
-                  }}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    currentIndex === idx ? 'w-5 bg-[#ff146b]' : 'w-2 bg-white/60 hover:bg-white'
-                  }`}
-                  aria-label={`Slide ${idx + 1}`}
+          {/* Horizontal Slide Track */}
+          <div
+            className="flex w-full transition-transform duration-700 ease-in-out will-change-transform"
+            style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+          >
+            {bannerList.map((bannerUrl, idx) => (
+              <div key={idx} className="min-w-full w-full shrink-0">
+                <img
+                  src={bannerUrl || defaultBannerImg}
+                  alt={`Ferrari Jacket Collection Banner ${idx + 1}`}
+                  className="w-full h-auto aspect-[4/3] sm:aspect-[16/10] object-cover block"
+                  referrerPolicy="no-referrer"
+                  loading={idx === 0 ? 'eager' : 'lazy'}
                 />
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -93,6 +112,7 @@ export const Hero: React.FC<HeroProps> = ({
     </section>
   );
 };
+
 
 
 

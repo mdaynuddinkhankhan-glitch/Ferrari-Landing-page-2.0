@@ -1151,15 +1151,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleSafeBackToStore = async () => {
+  const handleSafeBackToStore = () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    // Flush save any pending settings before returning to store
-    await saveStoredSettings(settings);
+    // Perform background save without blocking navigation
+    saveStoredSettings(settings).catch(console.warn);
     if (onSettingsUpdate) {
       onSettingsUpdate(settings);
     }
+    // Navigate immediately back to store
     onBackToStore();
   };
 
