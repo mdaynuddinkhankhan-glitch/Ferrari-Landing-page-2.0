@@ -56,6 +56,7 @@ export interface SiteSettings {
   ttAccessToken?: string;
   ttTestEventCode?: string;
   products: ShirtProduct[];
+  updatedAt?: string;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -299,11 +300,16 @@ export async function prepareCompressedSettings(
 
 export async function saveStoredSettings(settings: SiteSettings): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+
     // 1. Crystal Clear High-Definition preservation (Full HD 1920px / 1200px pristine WebP)
     let optimizedSettings = await prepareCompressedSettings(settings, 1920, 0.90, 1200, 0.88);
+    optimizedSettings.updatedAt = nowIso;
 
     // 2. Immediately update localStorage for zero-latency local experience
     try {
+      localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(optimizedSettings));
       window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
     } catch (err) {
@@ -314,14 +320,13 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     if (isFirestoreQuotaExhausted()) {
       return {
         success: true,
-        warning: 'দৈনিক ফ্রি ক্লাউড কোটা সাময়িকভাবে পূর্ণ হয়েছে, সেটিংস লোকাল স্টোরেজে সফলভাবে সংরক্ষিত হয়েছে।',
+        warning: 'দৈনিক ফ্রি ক্লাউড কোটা সাময়িকভাবে পূর্ণ হয়েছে, সেটিংস লোকাল স্টোরেজে সফলভাবে সংরক্ষিত রয়েছে।',
       };
     }
 
-    const nowIso = new Date().toISOString();
     const savePromises: Promise<any>[] = [];
 
-    // Dedicated banners document
+    // Dedicated banners document (up to 1MB)
     const bannersDocRef = doc(db, 'settings', 'banners_config');
     savePromises.push(
       setDoc(
@@ -335,7 +340,7 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       )
     );
 
-    // Dedicated products document
+    // Dedicated products document (up to 1MB)
     const productsDocRef = doc(db, 'settings', 'products_config');
     savePromises.push(
       setDoc(
@@ -348,22 +353,14 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       )
     );
 
-    // Main site config
-    let siteConfigPayload: any = {
+    // Main site config - omit heavy multi-banner array to stay well under 1MB document limit
+    const siteConfigPayload: any = {
       ...optimizedSettings,
+      heroBanners: optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0
+        ? [optimizedSettings.heroBanners[0]]
+        : [],
       updatedAt: nowIso,
     };
-    const mainClean = cleanFirestoreData(siteConfigPayload);
-    const mainSize = new Blob([JSON.stringify(mainClean)]).size;
-
-    if (mainSize > 650000) {
-      siteConfigPayload = {
-        ...siteConfigPayload,
-        heroBanners: optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0
-          ? [optimizedSettings.heroBanners[0]]
-          : [],
-      };
-    }
 
     const docRef = doc(db, 'settings', 'site_config');
     savePromises.push(setDoc(docRef, cleanFirestoreData(siteConfigPayload), { merge: true }));
@@ -420,27 +417,73 @@ export function subscribeToSiteSettings(
   let currentBannersConfig: any = null;
   let currentProductsConfig: any = null;
 
+  const parseTs = (ts: any): number => {
+    if (!ts) return 0;
+    if (typeof ts === 'number') return ts;
+    if (typeof ts === 'string') {
+      const d = new Date(ts).getTime();
+      return isNaN(d) ? 0 : d;
+    }
+    return 0;
+  };
+
   const emitMerged = () => {
-    const base = currentSiteConfig || getStoredSettings();
+    const localStored = getStoredSettings();
+    const localTime = parseTs(localStored.updatedAt);
+    const lastLocalEdit = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
+    const effectiveLocalTime = Math.max(localTime || 0, lastLocalEdit || 0);
+
+    const siteCloudTime = parseTs(currentSiteConfig?.updatedAt);
+    const bannersCloudTime = parseTs(currentBannersConfig?.updatedAt);
+    const productsCloudTime = parseTs(currentProductsConfig?.updatedAt);
+
+    // If local was modified in the last 120 seconds, local modifications have absolute authority
+    const isRecentLocalAction = Date.now() - effectiveLocalTime < 120 * 1000;
+
+    let base = localStored;
+    if (currentSiteConfig && siteCloudTime > effectiveLocalTime && !isRecentLocalAction) {
+      base = { ...localStored, ...currentSiteConfig };
+    }
+
     const merged: any = {
       ...base,
     };
 
+    // Hero Banners: Only overwrite local HD banners if cloud banners are strictly NEWER than local changes
     if (
       currentBannersConfig?.heroBanners &&
       Array.isArray(currentBannersConfig.heroBanners) &&
       currentBannersConfig.heroBanners.length > 0
     ) {
-      merged.heroBanners = currentBannersConfig.heroBanners;
-      merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
+      if (bannersCloudTime > effectiveLocalTime && !isRecentLocalAction) {
+        merged.heroBanners = currentBannersConfig.heroBanners;
+        merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
+      } else {
+        merged.heroBanners = localStored.heroBanners && localStored.heroBanners.length > 0
+          ? localStored.heroBanners
+          : currentBannersConfig.heroBanners;
+        merged.heroBannerImg = localStored.heroBannerImg || (merged.heroBanners?.[0] || '');
+      }
+    } else {
+      merged.heroBanners = localStored.heroBanners || merged.heroBanners;
+      merged.heroBannerImg = localStored.heroBannerImg || merged.heroBannerImg;
     }
 
+    // Products: Only overwrite local products if cloud products are strictly NEWER than local changes
     if (
       currentProductsConfig?.products &&
       Array.isArray(currentProductsConfig.products) &&
       currentProductsConfig.products.length > 0
     ) {
-      merged.products = currentProductsConfig.products;
+      if (productsCloudTime > effectiveLocalTime && !isRecentLocalAction) {
+        merged.products = currentProductsConfig.products;
+      } else {
+        merged.products = localStored.products && localStored.products.length > 0
+          ? localStored.products
+          : currentProductsConfig.products;
+      }
+    } else {
+      merged.products = localStored.products || merged.products;
     }
 
     const finalSettings = sanitizeAndMergeSettings(merged);

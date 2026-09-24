@@ -34,9 +34,6 @@ const isBrowser = typeof window !== 'undefined';
 
 const QUOTA_EXHAUSTED_KEY = 'fz_firestore_quota_exhausted_until';
 
-// Daily write quota cooldown period until Google resets free daily tier
-const QUOTA_EXHAUSTED_UNTIL_RESET = 1790240000000;
-
 /**
  * Checks whether Firestore free daily write quota is currently exhausted.
  * This circuit-breaker prevents endless retry loops, backoff delays, and backend overload errors.
@@ -45,18 +42,12 @@ export function isFirestoreQuotaExhausted(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const raw = localStorage.getItem(QUOTA_EXHAUSTED_KEY);
-    if (raw) {
-      const expiresAt = parseInt(raw, 10);
-      if (Date.now() < expiresAt) {
-        return true;
-      }
-      localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
-      return false;
-    }
-    // Check known current daily quota threshold
-    if (Date.now() < QUOTA_EXHAUSTED_UNTIL_RESET) {
+    if (!raw) return false;
+    const expiresAt = parseInt(raw, 10);
+    if (Date.now() < expiresAt) {
       return true;
     }
+    localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
     return false;
   } catch {
     return false;
@@ -67,10 +58,10 @@ export function isFirestoreQuotaExhausted(): boolean {
  * Marks Firestore quota as exhausted, pausing cloud write attempts for a cooldown window
  * so the backend is not overloaded with backoff delay errors.
  */
-export function markFirestoreQuotaExhausted(durationMs = 1000 * 60 * 60 * 4): void {
+export function markFirestoreQuotaExhausted(durationMs = 1000 * 60 * 15): void {
   if (typeof window === 'undefined') return;
   try {
-    const expiresAt = Math.max(Date.now() + durationMs, QUOTA_EXHAUSTED_UNTIL_RESET);
+    const expiresAt = Date.now() + durationMs;
     localStorage.setItem(QUOTA_EXHAUSTED_KEY, String(expiresAt));
   } catch {
     // ignore
