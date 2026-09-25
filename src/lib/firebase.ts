@@ -1,6 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import rawConfig from '../../firebase-applet-config.json';
 
 // Permanent production Firebase configuration for Porshibari Fashion
@@ -93,6 +94,19 @@ export const db = initializeFirestore(
 );
 
 export const auth = getAuth(app);
+
+// Safe getter for Storage to prevent uncaught error when Firebase Cloud Storage is not provisioned
+let _storageInstance: any = null;
+export const getSafeStorage = () => {
+  if (_storageInstance) return _storageInstance;
+  try {
+    _storageInstance = getStorage(app);
+    return _storageInstance;
+  } catch (e) {
+    return null;
+  }
+};
+export const storage = null;
 
 export enum OperationType {
   CREATE = 'create',

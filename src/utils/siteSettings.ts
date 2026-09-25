@@ -371,7 +371,7 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       };
     }
 
-    // Dedicated banners document (guaranteed under 500KB)
+    // Dedicated banners document (guaranteed under 400KB)
     try {
       const bannersDocRef = doc(db, 'settings', 'banners_config');
       await setDoc(
@@ -402,11 +402,48 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       console.warn('Products cloud write note:', prodErr);
     }
 
-    // Main site config document
+    // Dedicated size chart document (guaranteed under 200KB)
+    try {
+      const sizeChartDocRef = doc(db, 'settings', 'sizechart_config');
+      await setDoc(
+        sizeChartDocRef,
+        cleanFirestoreData({
+          sizeChartImage: optimizedSettings.sizeChartImage || '',
+          sizeChartRows: optimizedSettings.sizeChartRows || [],
+          sizeChartTitle: optimizedSettings.sizeChartTitle || '',
+          sizeChartSubtitle: optimizedSettings.sizeChartSubtitle || '',
+          sizeChartDisplayMode: optimizedSettings.sizeChartDisplayMode || 'image',
+          updatedAt: nowIso,
+        }),
+        { merge: true }
+      );
+    } catch (scErr) {
+      console.warn('Size chart cloud write note:', scErr);
+    }
+
+    // Main site config document - strip giant data URLs to guarantee document stays under 20KB
     try {
       const siteConfigPayload: any = {
         ...optimizedSettings,
-        heroBanners: optimizedSettings.heroBanners || [],
+        heroBanners: (optimizedSettings.heroBanners || []).map((b) =>
+          typeof b === 'string' && b.startsWith('data:image') && b.length > 2000 ? '' : b
+        ),
+        heroBannerImg:
+          typeof optimizedSettings.heroBannerImg === 'string' &&
+          optimizedSettings.heroBannerImg.startsWith('data:image') &&
+          optimizedSettings.heroBannerImg.length > 2000
+            ? ''
+            : optimizedSettings.heroBannerImg,
+        products: (optimizedSettings.products || []).map((p) => ({
+          ...p,
+          image: typeof p.image === 'string' && p.image.startsWith('data:image') && p.image.length > 2000 ? '' : p.image,
+        })),
+        sizeChartImage:
+          typeof optimizedSettings.sizeChartImage === 'string' &&
+          optimizedSettings.sizeChartImage.startsWith('data:image') &&
+          optimizedSettings.sizeChartImage.length > 2000
+            ? ''
+            : optimizedSettings.sizeChartImage,
         updatedAt: nowIso,
       };
       const docRef = doc(db, 'settings', 'site_config');
@@ -464,6 +501,7 @@ export function subscribeToSiteSettings(
   let currentSiteConfig: any = null;
   let currentBannersConfig: any = null;
   let currentProductsConfig: any = null;
+  let currentSizeChartConfig: any = null;
 
   const emitMerged = () => {
     const localStored = getStoredSettings();
@@ -504,6 +542,25 @@ export function subscribeToSiteSettings(
       currentSiteConfig.products.length > 0
     ) {
       merged.products = currentSiteConfig.products;
+    }
+
+    // Merge size chart config
+    if (currentSizeChartConfig) {
+      if (currentSizeChartConfig.sizeChartImage !== undefined) {
+        merged.sizeChartImage = currentSizeChartConfig.sizeChartImage;
+      }
+      if (currentSizeChartConfig.sizeChartRows && Array.isArray(currentSizeChartConfig.sizeChartRows)) {
+        merged.sizeChartRows = currentSizeChartConfig.sizeChartRows;
+      }
+      if (currentSizeChartConfig.sizeChartTitle) {
+        merged.sizeChartTitle = currentSizeChartConfig.sizeChartTitle;
+      }
+      if (currentSizeChartConfig.sizeChartSubtitle) {
+        merged.sizeChartSubtitle = currentSizeChartConfig.sizeChartSubtitle;
+      }
+      if (currentSizeChartConfig.sizeChartDisplayMode) {
+        merged.sizeChartDisplayMode = currentSizeChartConfig.sizeChartDisplayMode;
+      }
     }
 
     const finalSettings = sanitizeAndMergeSettings(merged);
@@ -572,6 +629,25 @@ export function subscribeToSiteSettings(
       }
     );
     unsubscribers.push(unsubProducts);
+
+    // 4. Listen to sizechart_config
+    const sizeChartRef = doc(db, 'settings', 'sizechart_config');
+    const unsubSizeChart = onSnapshot(
+      sizeChartRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          currentSizeChartConfig = snapshot.data();
+          emitMerged();
+        }
+      },
+      (err) => {
+        if (isFirestoreQuotaError(err)) {
+          markFirestoreQuotaExhausted();
+        }
+        console.warn('Cloud sizechart_config subscription note:', err?.message || err);
+      }
+    );
+    unsubscribers.push(unsubSizeChart);
   } catch (err) {
     console.warn('Could not initialize cloud settings subscriber:', err);
   }

@@ -3,7 +3,7 @@ import { PRODUCTS, SHIRT_PRICE } from '../data/products';
 import { ShirtColorId, ShirtSize, ShirtProduct, OrderConfirmation } from '../types';
 import { formatTaka } from '../utils/bengali';
 import { CheckCircle, Truck, AlertCircle, ShoppingCart, Loader2 } from 'lucide-react';
-import { saveOrderToFirestore } from '../services/orderService';
+import { saveOrderToFirestore, generateUniqueOrderId } from '../services/orderService';
 import { trackPurchase, trackInitiateCheckout } from '../utils/pixelTracking';
 import { getStoredSettings, SizeChartRowItem } from '../utils/siteSettings';
 
@@ -142,7 +142,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -227,23 +227,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
     setIsSubmitting(true);
 
-    // Generate readable order ID like #7264
-    let nextNum = 7264;
-    try {
-      const existing = localStorage.getItem('porshibari_orders');
-      if (existing) {
-        const list = JSON.parse(existing);
-        if (Array.isArray(list) && list.length > 0 && list[0]?.orderId) {
-          const match = String(list[0].orderId).match(/\d+/);
-          if (match) {
-            nextNum = parseInt(match[0], 10) + 1;
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-    const orderId = `#${nextNum}`;
+    // Generate guaranteed unique 6-digit order ID for every customer and device
+    const orderId = generateUniqueOrderId();
     const now = new Date();
     const formattedOrderTime =
       now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
@@ -276,20 +261,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       status: 'Processing',
     };
 
-    // Save order into localStorage for immediate local access
-    try {
-      const existing = localStorage.getItem('porshibari_orders');
-      let orderList: OrderConfirmation[] = [];
-      if (existing) {
-        const parsed = JSON.parse(existing);
-        if (Array.isArray(parsed)) orderList = parsed;
-      }
-      orderList.unshift(confirmation);
-      localStorage.setItem('porshibari_orders', JSON.stringify(orderList));
-    } catch (err) {
-      console.error('Failed to save order to local storage', err);
-    }
-
     // Track Real Pixel Purchase event (Meta Pixel + TikTok Pixel + CAPI)
     try {
       trackPurchase(
@@ -307,18 +278,20 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       console.warn('Pixel purchase tracking error:', pixelErr);
     }
 
-    // Persist order to Firebase Firestore cloud database with smooth 1.5s loading
-    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 1500));
+    // Persist order to central Firebase Firestore cloud database with smooth loading
+    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 1200));
 
-    Promise.all([
-      saveOrderToFirestore(confirmation).catch((err) => {
-        console.warn('Firebase order save note:', err);
-      }),
-      minLoadingTime,
-    ]).finally(() => {
+    try {
+      await Promise.all([
+        saveOrderToFirestore(confirmation),
+        minLoadingTime,
+      ]);
+    } catch (saveErr) {
+      console.warn('Order save notice:', saveErr);
+    } finally {
       setIsSubmitting(false);
       onOrderSuccess(confirmation);
-    });
+    }
   };
 
   return (

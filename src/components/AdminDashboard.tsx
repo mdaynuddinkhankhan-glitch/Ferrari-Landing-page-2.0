@@ -90,6 +90,7 @@ import { SteadfastCourierSection } from './SteadfastCourierSection';
 import { ConversionSettingsSection } from './ConversionSettingsSection';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { createSteadfastConsignment, fetchSteadfastDeliveryStatus } from '../utils/steadfastApi';
+import { uploadImageFileToCloud, uploadDataUrlToCloud } from '../services/imageUploadService';
 
 interface AdminDashboardProps {
   initialSettings?: SiteSettings;
@@ -1058,31 +1059,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showSuccessBanner(`নতুন অর্ডার ${newOrderId} সফলভাবে যোগ করা হয়েছে!`);
   };
 
-  // Handle image upload from file (converts and compresses to high quality compact format)
+  // Handle image upload from file (uploads to permanent cloud storage + provides crisp URL)
   const handleFileUpload = async (
     file: File,
-    onComplete: (dataUrl: string) => void
+    onComplete: (urlOrData: string) => void,
+    folder: 'banners' | 'products' | 'general' = 'banners'
   ) => {
     if (!file.type.startsWith('image/')) {
       showErrorBanner('দয়া করে একটি সঠিক ছবি (JPG, PNG, WEBP) ফাইল সিলেক্ট করুন।');
       return;
     }
     try {
-      showSuccessBanner('ছবি ফুল এইচডি (Full HD) কোয়ালিটিতে প্রস্তুত হচ্ছে...');
-      const compressed = await compressImageFile(file, 1920, 0.90);
-      onComplete(compressed);
-      showSuccessBanner('ছবি 100% ক্রিস্টাল ক্লিয়ার Full HD কোয়ালিটিতে প্রস্তুত হয়েছে!');
-    } catch (err) {
-      console.warn('Image processing fallback:', err);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        if (e.target?.result) {
-          const rawUrl = e.target.result as string;
-          const opt = await compressDataUrl(rawUrl, 1920, 0.90, true);
-          onComplete(opt);
-        }
-      };
-      reader.readAsDataURL(file);
+      showSuccessBanner('ছবি সেন্ট্রাল ক্লাউড স্টোরেজে আপলোড হচ্ছে...');
+      const cloudUrl = await uploadImageFileToCloud(file, folder);
+      onComplete(cloudUrl);
+      showSuccessBanner('ছবি সফলভাবে ক্লাউড স্টোরেজে সেভ হয়েছে এবং সব ফোনে লাইভ হয়েছে!');
+    } catch (err: any) {
+      console.warn('Image upload processing notice:', err);
+      showErrorBanner('ছবি প্রসেসিংয়ে সমস্যা হয়েছে, পুনরায় চেষ্টা করুন।');
     }
   };
 
@@ -1122,13 +1116,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleProductImageUpload = async (index: number, rawDataUrl: string) => {
     setUploadingProductIdx(index);
-    showSuccessBanner('ছবি ফুল এইচডি কোয়ালিটিতে প্রসেস হচ্ছে...');
+    showSuccessBanner('প্রোডাক্ট ছবি ক্লাউড স্টোরেজে প্রসেস হচ্ছে...');
     try {
-      const compressed = await compressDataUrl(rawDataUrl, 1080, 0.82);
+      const cloudUrl = await uploadDataUrlToCloud(rawDataUrl, 'products');
       const updatedProducts = [...settings.products];
       updatedProducts[index] = {
         ...updatedProducts[index],
-        image: compressed,
+        image: cloudUrl,
       };
       const updatedSettings: SiteSettings = {
         ...settings,
@@ -1140,7 +1134,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       const res = await saveStoredSettings(updatedSettings);
       if (res.success) {
-        showSuccessBanner(res.warning || `প্রোডাক্ট ${index + 1} এর ফুল এইচডি ছবি সাথে সাথে লাইভ হয়েছে!`);
+        showSuccessBanner(res.warning || `প্রোডাক্ট ${index + 1} এর ছবি ক্লাউডে সেভ হয়েছে এবং সব ফোনে সাথে সাথে লাইভ হয়েছে!`);
       } else {
         showErrorBanner(`ছবি সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
       }

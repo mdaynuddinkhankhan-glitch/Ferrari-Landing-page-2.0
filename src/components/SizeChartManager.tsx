@@ -3,6 +3,7 @@ import { Ruler, Plus, Trash2, RotateCcw, Save, Upload, Image as ImageIcon, Check
 import { SiteSettings, SizeChartRowItem, DEFAULT_SIZE_CHART_ROWS } from '../utils/siteSettings';
 import { SizeChart } from './SizeChart';
 import { compressDataUrl } from '../utils/imageCompressor';
+import { uploadImageFileToCloud } from '../services/imageUploadService';
 import defaultSizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
 
 interface SizeChartManagerProps {
@@ -90,28 +91,22 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
 
     try {
       setIsUploadingImg(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const rawBase64 = event.target?.result as string;
-        if (rawBase64) {
-          // Compress preserving crisp quality
-          const compressed = await compressDataUrl(rawBase64, 1600, 0.88, false);
-          setChartImage(compressed);
-          if (displayMode === 'table') {
-            setDisplayMode('both');
-          }
-          if (showSuccessBanner) {
-            showSuccessBanner('সাইজ চার্ট ছবি সফলভাবে যোগ হয়েছে! পরিবর্তন সেভ করতে বাটন চাপুন।');
-          }
-        }
-        setIsUploadingImg(false);
-      };
-      reader.readAsDataURL(file);
+      if (showSuccessBanner) showSuccessBanner('সাইজ চার্ট ছবি ক্লাউড স্টোরেজে আপলোড হচ্ছে...');
+      const cloudUrl = await uploadImageFileToCloud(file, 'sizechart');
+      setChartImage(cloudUrl);
+      if (displayMode === 'table') {
+        setDisplayMode('both');
+      }
+      if (showSuccessBanner) {
+        showSuccessBanner('সাইজ চার্ট ছবি সফলভাবে যোগ হয়েছে! পরিবর্তন সেভ করতে নিচের বাটন চাপুন।');
+      }
     } catch (err: any) {
-      setIsUploadingImg(false);
+      console.warn('Size chart image upload error:', err);
       if (showErrorBanner) showErrorBanner('ছবি প্রসেসিংয়ে ত্রুটি হয়েছে।');
+    } finally {
+      setIsUploadingImg(false);
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   const handleSave = async () => {

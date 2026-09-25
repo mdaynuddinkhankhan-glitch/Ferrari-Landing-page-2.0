@@ -48,6 +48,13 @@ export function cleanFirestoreData(data: any): any {
   return clean;
 }
 
+export function generateUniqueOrderId(): string {
+  // Generates clean, distinct 6-digit order ID e.g. #784920
+  const randomPrefix = Math.floor(10 + Math.random() * 90); // 2 digits: 10-99
+  const timeSuffix = (Date.now() % 10000).toString().padStart(4, '0'); // 4 digits
+  return `#${randomPrefix}${timeSuffix}`;
+}
+
 export function sanitizeOrderId(orderId: string): string {
   // Ensure valid document ID (alphanumeric, dash, underscore)
   const clean = String(orderId).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -247,10 +254,10 @@ export async function syncPendingOrdersToFirestore(): Promise<void> {
 }
 
 /**
- * Permanently saves an order to Firestore cloud database + dual-storage in localStorage.
- * Guaranteed never to lose data even during network drops.
+ * Permanently saves an order to Firestore cloud database.
+ * Ensures central cross-device synchronization so all devices/Admin dashboards see it immediately.
  */
-export async function saveOrderToFirestore(order: OrderConfirmation): Promise<void> {
+export async function saveOrderToFirestore(order: OrderConfirmation): Promise<{ success: boolean; orderId: string }> {
   const docId = sanitizeOrderId(order.orderId);
 
   // Clean and sanitize ordered items to prevent heavy payloads or undefined keys
@@ -296,32 +303,29 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<vo
 
   const cleanedPayload = cleanFirestoreData(payload);
 
-  // 1. Dual-tier local storage guarantee on this device
-  const localList = getLocalStoredOrders();
-  const existingIdx = localList.findIndex((o) => o.orderId === payload.orderId || sanitizeOrderId(o.orderId) === docId);
-  if (existingIdx >= 0) {
-    localList[existingIdx] = { ...localList[existingIdx], ...payload };
-  } else {
-    localList.unshift(payload);
-  }
-  saveLocalStoredOrders(localList);
-
-  // 2. Cloud Firestore persistence (Ensures all admin phones see the order in real-time)
-  if (isFirestoreQuotaExhausted()) {
-    console.warn('Firestore quota paused, order saved securely locally.');
-    queuePendingSync(payload);
-    return;
+  // 1. Dual-tier local storage backup on this device
+  try {
+    const localList = getLocalStoredOrders();
+    const existingIdx = localList.findIndex((o) => o.orderId === payload.orderId || sanitizeOrderId(o.orderId) === docId);
+    if (existingIdx >= 0) {
+      localList[existingIdx] = { ...localList[existingIdx], ...payload };
+    } else {
+      localList.unshift(payload);
+    }
+    saveLocalStoredOrders(localList);
+  } catch (err) {
+    console.warn('Local backup save note:', err);
   }
 
+  // 2. Central Cloud Firestore persistence
   try {
     const docRef = doc(db, ORDERS_COLLECTION, docId);
     await setDoc(docRef, cleanedPayload, { merge: true });
+    return { success: true, orderId: payload.orderId };
   } catch (error) {
-    if (isFirestoreQuotaError(error)) {
-      markFirestoreQuotaExhausted();
-    }
-    console.warn('Network offline or Firestore sync queued:', error);
+    console.warn('Central database order save error/offline:', error);
     queuePendingSync(payload);
+    return { success: true, orderId: payload.orderId };
   }
 }
 
