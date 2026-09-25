@@ -273,13 +273,28 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           numItems: totalItemCount,
         },
         getStoredSettings()
-      );
+      ).catch((pixelErr) => {
+        console.warn('Pixel purchase tracking error:', pixelErr);
+      });
     } catch (pixelErr) {
       console.warn('Pixel purchase tracking error:', pixelErr);
     }
 
+    let hasCompleted = false;
+    const finalizeOrder = () => {
+      if (hasCompleted) return;
+      hasCompleted = true;
+      setIsSubmitting(false);
+      onOrderSuccess(confirmation);
+    };
+
+    // Failsafe watchdog timer: Guarantee completion within maximum 2.2 seconds even on slow mobile networks
+    const watchdogTimer = setTimeout(() => {
+      finalizeOrder();
+    }, 2200);
+
     // Persist order to central Firebase Firestore cloud database with smooth loading
-    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 1200));
+    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 800));
 
     try {
       await Promise.all([
@@ -289,8 +304,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     } catch (saveErr) {
       console.warn('Order save notice:', saveErr);
     } finally {
-      setIsSubmitting(false);
-      onOrderSuccess(confirmation);
+      clearTimeout(watchdogTimer);
+      finalizeOrder();
     }
   };
 

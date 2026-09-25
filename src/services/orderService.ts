@@ -317,14 +317,23 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<{ 
     console.warn('Local backup save note:', err);
   }
 
-  // 2. Central Cloud Firestore persistence
+  // 2. Central Cloud Firestore persistence with guaranteed timeout
   try {
     const docRef = doc(db, ORDERS_COLLECTION, docId);
-    await setDoc(docRef, cleanedPayload, { merge: true });
+    await Promise.race([
+      setDoc(docRef, cleanedPayload, { merge: true }),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore write timeout')), 2500)
+      ),
+    ]);
     return { success: true, orderId: payload.orderId };
   } catch (error) {
-    console.warn('Central database order save error/offline:', error);
+    console.warn('Central database order save offline/timeout:', error);
     queuePendingSync(payload);
+    // Background retry when network allows
+    try {
+      setDoc(doc(db, ORDERS_COLLECTION, docId), cleanedPayload, { merge: true }).catch(() => {});
+    } catch {}
     return { success: true, orderId: payload.orderId };
   }
 }
