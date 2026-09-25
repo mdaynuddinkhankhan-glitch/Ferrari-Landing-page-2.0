@@ -122,12 +122,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [uploadingProductIdx, setUploadingProductIdx] = useState<number | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isEditingSettingsRef = useRef(false);
+  const isFirstSettingsMount = useRef(true);
+  const settingsAutoSaveRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (initialSettings) {
+    if (initialSettings && !isEditingSettingsRef.current) {
       setSettings(initialSettings);
     }
   }, [initialSettings]);
+
+  // Instant local persistence on every change + debounced cloud sync
+  useEffect(() => {
+    if (isFirstSettingsMount.current) {
+      isFirstSettingsMount.current = false;
+      return;
+    }
+
+    isEditingSettingsRef.current = true;
+    const nowMs = Date.now();
+    const updatedWithTimestamp = {
+      ...settings,
+      updatedAt: new Date(nowMs).toISOString(),
+    };
+
+    try {
+      localStorage.setItem('ferrari_jacket_site_settings_v1', JSON.stringify(updatedWithTimestamp));
+      localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
+    } catch (e) {
+      console.warn('Local storage write warning', e);
+    }
+
+    if (onSettingsUpdate) {
+      onSettingsUpdate(updatedWithTimestamp);
+    }
+
+    if (settingsAutoSaveRef.current) {
+      clearTimeout(settingsAutoSaveRef.current);
+    }
+    settingsAutoSaveRef.current = setTimeout(() => {
+      saveStoredSettings(updatedWithTimestamp)
+        .then(() => {
+          isEditingSettingsRef.current = false;
+        })
+        .catch(() => {
+          isEditingSettingsRef.current = false;
+        });
+    }, 1200);
+
+    return () => {
+      if (settingsAutoSaveRef.current) {
+        clearTimeout(settingsAutoSaveRef.current);
+      }
+    };
+  }, [settings]);
 
   // WooCommerce style order state
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -4367,6 +4415,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full px-3 py-2 text-sm bg-neutral-50 border border-neutral-300 rounded-xl outline-none focus:bg-white focus:border-[#ff146b]"
                       />
                     </div>
+                  </div>
+
+                  {/* Inline quick save bar for headline section */}
+                  <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-3">
+                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>পরিবর্তন স্বয়ংক্রিয়ভাবে ডিভাইসে সংরক্ষিত হয়</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSaveAllSettings}
+                      disabled={isSavingSettings}
+                      className="px-4 py-2 bg-[#ff146b] hover:bg-[#e60055] disabled:opacity-60 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow transition-all active:scale-95 cursor-pointer"
+                    >
+                      {isSavingSettings ? (
+                        <>
+                          <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                          <span>সেভ হচ্ছে...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>হেডলাইন ও ব্যানার সেভ করুন</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

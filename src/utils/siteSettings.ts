@@ -89,8 +89,8 @@ export interface SiteSettings {
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   brandNamePart1: 'Porshibari',
   brandNamePart2: 'Fashion House',
-  heroHeadline: 'প্রিমিয়াম লাক্সারি',
-  heroHighlight: 'Ferrari Jacket কালেকশন',
+  heroHeadline: '🚗 🔥 Premium Racing-Inspired',
+  heroHighlight: 'Jacket 🏎️ 🔥',
   heroBannerImg: bannerImg,
   heroBanners: [bannerImg],
   watermarkText: 'Porshibari.shop',
@@ -216,15 +216,6 @@ export function sanitizeAndMergeSettings(parsed: any): SiteSettings {
         };
       });
 
-  const isOldShirtContent =
-    parsed.heroHighlight?.includes('শার্ট') ||
-    parsed.descriptionCardText?.includes('শার্ট') ||
-    parsed.infoDescription?.includes('শার্ট');
-
-  const isFerrariBrand =
-    parsed.brandNamePart1?.toLowerCase() === 'ferrari' &&
-    (!parsed.brandNamePart2 || parsed.brandNamePart2?.toLowerCase() === 'racing jacket');
-
   const sanitizedFormSubmitButtonText =
     parsed.formSubmitButtonText === 'অর্ডার নিশ্চিত করতে ক্লিক করুন' || !parsed.formSubmitButtonText
       ? 'অর্ডার কনফার্ম করুন'
@@ -234,26 +225,6 @@ export function sanitizeAndMergeSettings(parsed: any): SiteSettings {
     ...DEFAULT_SITE_SETTINGS,
     ...parsed,
     formSubmitButtonText: sanitizedFormSubmitButtonText,
-    ...(isFerrariBrand
-      ? {
-          brandNamePart1: 'Porshibari',
-          brandNamePart2: 'Fashion House',
-        }
-      : {}),
-    ...(isOldShirtContent
-      ? {
-          brandNamePart1: DEFAULT_SITE_SETTINGS.brandNamePart1,
-          brandNamePart2: DEFAULT_SITE_SETTINGS.brandNamePart2,
-          heroHeadline: DEFAULT_SITE_SETTINGS.heroHeadline,
-          heroHighlight: DEFAULT_SITE_SETTINGS.heroHighlight,
-          infoBadge: DEFAULT_SITE_SETTINGS.infoBadge,
-          infoDescription: DEFAULT_SITE_SETTINGS.infoDescription,
-          descriptionCardText: DEFAULT_SITE_SETTINGS.descriptionCardText,
-          colorsRowText: DEFAULT_SITE_SETTINGS.colorsRowText,
-          sizeChartTitle: DEFAULT_SITE_SETTINGS.sizeChartTitle,
-          orderFormBannerTitle: DEFAULT_SITE_SETTINGS.orderFormBannerTitle,
-        }
-      : {}),
     heroBannerImg: banners[0] || DEFAULT_SITE_SETTINGS.heroBannerImg,
     heroBanners:
       banners.length > 0 ? banners : DEFAULT_SITE_SETTINGS.heroBanners,
@@ -313,15 +284,19 @@ export async function prepareCompressedSettings(
   const rawBanners = settings.heroBanners || (settings.heroBannerImg ? [settings.heroBannerImg] : []);
   for (const b of rawBanners) {
     if (b && typeof b === 'string') {
-      const comp = await compressDataUrl(b, bannerDimension, bannerQuality, false);
-      compressedBanners.push(comp);
+      if (b.startsWith('data:image') && b.length > 250000) {
+        const comp = await compressDataUrl(b, bannerDimension, bannerQuality, false);
+        compressedBanners.push(comp);
+      } else {
+        compressedBanners.push(b);
+      }
     }
   }
 
   const compressedProducts = await Promise.all(
     (settings.products || []).map(async (p) => {
       let img = p.image;
-      if (img && typeof img === 'string') {
+      if (img && typeof img === 'string' && img.startsWith('data:image') && img.length > 250000) {
         img = await compressDataUrl(img, productDimension, productQuality, false);
       }
       return {
@@ -337,13 +312,13 @@ export async function prepareCompressedSettings(
     heroBanners: compressedBanners.length > 0 ? compressedBanners : settings.heroBanners,
     products: compressedProducts,
     sizeChartImage:
-      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image')
+      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image') && settings.sizeChartImage.length > 250000
         ? await compressDataUrl(settings.sizeChartImage, 1000, 0.80, false)
         : settings.sizeChartImage,
   };
 }
 
-async function safeSetDocWithTimeout(docRef: any, data: any, timeoutMs = 2000): Promise<boolean> {
+async function safeSetDocWithTimeout(docRef: any, data: any, timeoutMs = 10000): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
@@ -403,16 +378,17 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       };
     }
 
-    // 3. Prepare optimized payload
+    // 3. Prepare optimized payload (no redundant canvas loops for plain texts)
     const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.82, 800, 0.80);
 
-    // 4. Concurrently sync documents to Firestore with strict timeout (maximum 2 seconds total)
+    // 4. Concurrently sync documents to Firestore with safe timeout
     const writePromises: Promise<any>[] = [];
 
     // Main site config document (text, prices, pixels, etc.)
     const siteConfigPayload: any = {
       ...optimizedSettings,
       updatedAt: nowIso,
+      updatedAtMs: nowMs,
     };
     delete siteConfigPayload.heroBanners;
     delete siteConfigPayload.heroBannerImg;
@@ -420,7 +396,7 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     delete siteConfigPayload.sizeChartImage;
 
     const siteDocRef = doc(db, 'settings', 'site_config');
-    writePromises.push(safeSetDocWithTimeout(siteDocRef, cleanFirestoreData(siteConfigPayload), 2000));
+    writePromises.push(safeSetDocWithTimeout(siteDocRef, cleanFirestoreData(siteConfigPayload), 10000));
 
     // Dedicated banners document (only write if banners exist)
     if (optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0) {
@@ -432,8 +408,9 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
             heroBanners: optimizedSettings.heroBanners,
             heroBannerImg: optimizedSettings.heroBannerImg || optimizedSettings.heroBanners[0],
             updatedAt: nowIso,
+            updatedAtMs: nowMs,
           }),
-          2000
+          10000
         )
       );
     }
@@ -447,8 +424,9 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
           cleanFirestoreData({
             products: optimizedSettings.products,
             updatedAt: nowIso,
+            updatedAtMs: nowMs,
           }),
-          2000
+          10000
         )
       );
     }
@@ -466,8 +444,9 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
             sizeChartSubtitle: optimizedSettings.sizeChartSubtitle || '',
             sizeChartDisplayMode: optimizedSettings.sizeChartDisplayMode || 'image',
             updatedAt: nowIso,
+            updatedAtMs: nowMs,
           }),
-          2000
+          10000
         )
       );
     }
@@ -526,12 +505,30 @@ export function subscribeToSiteSettings(
 
   const emitMerged = () => {
     const localStored = getStoredSettings();
+    const localLastModified = Number(localStorage.getItem('porshibari_settings_last_modified') || 0);
+    const localUpdatedAtMs = localStored.updatedAt ? new Date(localStored.updatedAt).getTime() : 0;
+    const effectiveLocalTime = Math.max(localLastModified, localUpdatedAtMs);
 
-    // If cloud configs exist, cloud data is the master source of truth across all devices
-    const merged: any = {
-      ...localStored,
-      ...(currentSiteConfig || {}),
-    };
+    const cloudUpdatedAtRaw = currentSiteConfig?.updatedAtMs || currentSiteConfig?.updatedAt;
+    const cloudUpdatedAtMs = cloudUpdatedAtRaw ? (typeof cloudUpdatedAtRaw === 'number' ? cloudUpdatedAtRaw : new Date(cloudUpdatedAtRaw).getTime() || 0) : 0;
+
+    let merged: any;
+
+    // Check timestamp: If local saved data is NEWER than cloud data, DO NOT let older cloud data overwrite local edits!
+    if (effectiveLocalTime > 0 && effectiveLocalTime > cloudUpdatedAtMs) {
+      merged = {
+        ...(currentSiteConfig || {}),
+        ...localStored,
+      };
+      // Quietly push the fresher local version to Firestore in background
+      saveStoredSettings(localStored).catch(() => {});
+    } else {
+      // Cloud is newer or same freshness
+      merged = {
+        ...localStored,
+        ...(currentSiteConfig || {}),
+      };
+    }
 
     // Merge banners from banners_config or site_config
     if (
