@@ -124,6 +124,22 @@ export async function compressDataUrl(
   }
 
   return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(dataUrl);
+      }
+    }, 1500);
+
+    const finish = (result: string) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
+    };
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -131,7 +147,7 @@ export async function compressDataUrl(
       const origH = img.naturalHeight || img.height;
 
       if (!origW || !origH) {
-        resolve(dataUrl);
+        finish(dataUrl);
         return;
       }
 
@@ -156,7 +172,7 @@ export async function compressDataUrl(
       try {
         const webp = canvas.toDataURL('image/webp', quality);
         if (webp && webp.length > 200) {
-          resolve(webp);
+          finish(webp);
           return;
         }
       } catch {
@@ -166,14 +182,14 @@ export async function compressDataUrl(
       // High quality JPEG fallback
       try {
         const jpeg = canvas.toDataURL('image/jpeg', quality);
-        resolve(jpeg);
+        finish(jpeg);
       } catch {
-        resolve(dataUrl);
+        finish(dataUrl);
       }
     };
 
     img.onerror = () => {
-      resolve(dataUrl);
+      finish(dataUrl);
     };
 
     img.src = dataUrl;

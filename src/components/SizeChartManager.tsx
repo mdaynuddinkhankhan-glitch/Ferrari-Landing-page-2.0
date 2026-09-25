@@ -91,18 +91,33 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
 
     try {
       setIsUploadingImg(true);
-      if (showSuccessBanner) showSuccessBanner('সাইজ চার্ট ছবি ক্লাউড স্টোরেজে আপলোড হচ্ছে...');
+      if (showSuccessBanner) showSuccessBanner('সাইজ চার্ট ছবি প্রসেস হচ্ছে...');
       const cloudUrl = await uploadImageFileToCloud(file, 'sizechart');
       setChartImage(cloudUrl);
+
+      const targetMode = displayMode === 'table' ? 'both' : displayMode;
       if (displayMode === 'table') {
         setDisplayMode('both');
       }
+
+      // Automatically persist to Firestore cloud database so it's live across all devices immediately
+      const autoSaveSettings: SiteSettings = {
+        ...settings,
+        sizeChartTitle: title,
+        sizeChartSubtitle: subtitle,
+        sizeChartRows: rows,
+        sizeChartImage: cloudUrl,
+        sizeChartDisplayMode: targetMode,
+      };
+
+      await onUpdateSettings(autoSaveSettings);
+
       if (showSuccessBanner) {
-        showSuccessBanner('সাইজ চার্ট ছবি সফলভাবে যোগ হয়েছে! পরিবর্তন সেভ করতে নিচের বাটন চাপুন।');
+        showSuccessBanner('সাইজ চার্ট ছবি সফলভাবে আপলোড এবং ডাটাবেজে লাইভ সেভ হয়েছে! 🎉');
       }
     } catch (err: any) {
       console.warn('Size chart image upload error:', err);
-      if (showErrorBanner) showErrorBanner('ছবি প্রসেসিংয়ে ত্রুটি হয়েছে।');
+      if (showErrorBanner) showErrorBanner('ছবি প্রসেসিংয়ে ত্রুটি হয়েছে। পুনরায় চেষ্টা করুন।');
     } finally {
       setIsUploadingImg(false);
       e.target.value = '';
@@ -421,7 +436,19 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
           আপনার কাছে যদি গ্রাফিক্স ডিজাইনার দিয়ে বানানো সাইজ চার্টের কোনো ব্যানার ছবি থাকে, সেটি এখানে আপলোড করতে পারেন।
         </p>
 
-        {chartImage ? (
+        {isUploadingImg ? (
+          <div className="border-2 border-dashed border-[#ff146b] bg-pink-50/30 rounded-xl p-8 text-center animate-pulse">
+            <div className="w-12 h-12 rounded-full bg-pink-100 text-[#ff146b] flex items-center justify-center mx-auto mb-3">
+              <span className="inline-block w-6 h-6 border-3 border-[#ff146b] border-t-transparent rounded-full animate-spin"></span>
+            </div>
+            <p className="text-sm font-bold text-neutral-800">
+              সাইজ চার্ট ছবি প্রসেস ও লাইভ সেভ হচ্ছে...
+            </p>
+            <p className="text-xs text-neutral-500 mt-1">
+              অনুগ্রহ করে একটু অপেক্ষা করুন, সব ফোনে স্বয়ংক্রিয়ভাবে আপডেট হচ্ছে।
+            </p>
+          </div>
+        ) : chartImage ? (
           <div className="flex flex-col sm:flex-row items-start gap-4 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
             <div className="w-full sm:w-48 max-h-48 overflow-hidden rounded-lg bg-neutral-900 flex items-center justify-center border border-neutral-300">
               <img
@@ -452,9 +479,19 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setChartImage('');
+                    const updatedMode = displayMode === 'image' ? 'table' : displayMode;
                     if (displayMode === 'image') setDisplayMode('table');
+                    const updatedSettings: SiteSettings = {
+                      ...settings,
+                      sizeChartImage: '',
+                      sizeChartDisplayMode: updatedMode,
+                    };
+                    await onUpdateSettings(updatedSettings);
+                    if (showSuccessBanner) {
+                      showSuccessBanner('সাইজ চার্ট ছবি সফলভাবে মোছা হয়েছে এবং লাইভ আপডেট হয়েছে!');
+                    }
                   }}
                   className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
                 >

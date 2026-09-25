@@ -343,115 +343,136 @@ export async function prepareCompressedSettings(
   };
 }
 
+async function safeSetDocWithTimeout(docRef: any, data: any, timeoutMs = 2000): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    setDoc(docRef, data, { merge: true })
+      .then(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(true);
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          if (isFirestoreQuotaError(err)) {
+            markFirestoreQuotaExhausted();
+          }
+          console.warn(`Cloud save note for ${docRef.path}:`, err?.message || err);
+          resolve(false);
+        }
+      });
+  });
+}
+
 export async function saveStoredSettings(settings: SiteSettings): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
 
-    // 1. Crystal Clear High-Definition compression optimized for cloud document limits (<500KB total)
-    const optimizedSettings = await prepareCompressedSettings(settings, 1200, 0.82, 800, 0.80);
-    optimizedSettings.updatedAt = nowIso;
-
-    // 2. Immediately update localStorage on the current phone
+    // 1. FIRST: Instantly save locally to localStorage with zero latency
+    const localSettings: SiteSettings = {
+      ...settings,
+      updatedAt: nowIso,
+    };
     try {
       localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(optimizedSettings));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(localSettings));
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
+        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: localSettings }));
       }
     } catch (err) {
       console.warn('Failed to save site settings locally', err);
     }
 
-    // 3. Save to Firestore Cloud Database
+    // 2. Check circuit-breaker: if Firestore quota is currently exhausted, avoid cloud write and return immediately
     if (isFirestoreQuotaExhausted()) {
       return {
         success: true,
-        warning: 'দৈনিক ফ্রি ক্লাউড কোটা সাময়িকভাবে পূর্ণ হয়েছে, সেটিংস লোকাল স্টোরেজে সফলভাবে সংরক্ষিত রয়েছে।',
+        warning: 'দৈনিক ফ্রি ক্লাউড কোটা সাময়িকভাবে পূর্ণ হয়েছে, সেটিংস ডিভাইসে সফলভাবে সংরক্ষিত রয়েছে।',
       };
     }
 
-    // Dedicated banners document (guaranteed under 400KB)
-    try {
+    // 3. Prepare optimized payload
+    const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.82, 800, 0.80);
+
+    // 4. Concurrently sync documents to Firestore with strict timeout (maximum 2 seconds total)
+    const writePromises: Promise<any>[] = [];
+
+    // Main site config document (text, prices, pixels, etc.)
+    const siteConfigPayload: any = {
+      ...optimizedSettings,
+      updatedAt: nowIso,
+    };
+    delete siteConfigPayload.heroBanners;
+    delete siteConfigPayload.heroBannerImg;
+    delete siteConfigPayload.products;
+    delete siteConfigPayload.sizeChartImage;
+
+    const siteDocRef = doc(db, 'settings', 'site_config');
+    writePromises.push(safeSetDocWithTimeout(siteDocRef, cleanFirestoreData(siteConfigPayload), 2000));
+
+    // Dedicated banners document (only write if banners exist)
+    if (optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0) {
       const bannersDocRef = doc(db, 'settings', 'banners_config');
-      await setDoc(
-        bannersDocRef,
-        cleanFirestoreData({
-          heroBanners: optimizedSettings.heroBanners || [],
-          heroBannerImg: optimizedSettings.heroBannerImg || (optimizedSettings.heroBanners?.[0] || ''),
-          updatedAt: nowIso,
-        }),
-        { merge: true }
+      writePromises.push(
+        safeSetDocWithTimeout(
+          bannersDocRef,
+          cleanFirestoreData({
+            heroBanners: optimizedSettings.heroBanners,
+            heroBannerImg: optimizedSettings.heroBannerImg || optimizedSettings.heroBanners[0],
+            updatedAt: nowIso,
+          }),
+          2000
+        )
       );
-    } catch (bannerErr) {
-      console.warn('Banners cloud write note:', bannerErr);
     }
 
-    // Dedicated products document (guaranteed under 400KB)
-    try {
+    // Dedicated products document
+    if (optimizedSettings.products && optimizedSettings.products.length > 0) {
       const productsDocRef = doc(db, 'settings', 'products_config');
-      await setDoc(
-        productsDocRef,
-        cleanFirestoreData({
-          products: optimizedSettings.products || [],
-          updatedAt: nowIso,
-        }),
-        { merge: true }
+      writePromises.push(
+        safeSetDocWithTimeout(
+          productsDocRef,
+          cleanFirestoreData({
+            products: optimizedSettings.products,
+            updatedAt: nowIso,
+          }),
+          2000
+        )
       );
-    } catch (prodErr) {
-      console.warn('Products cloud write note:', prodErr);
     }
 
-    // Dedicated size chart document (guaranteed under 200KB)
-    try {
+    // Dedicated size chart document
+    if (optimizedSettings.sizeChartImage || (optimizedSettings.sizeChartRows && optimizedSettings.sizeChartRows.length > 0)) {
       const sizeChartDocRef = doc(db, 'settings', 'sizechart_config');
-      await setDoc(
-        sizeChartDocRef,
-        cleanFirestoreData({
-          sizeChartImage: optimizedSettings.sizeChartImage || '',
-          sizeChartRows: optimizedSettings.sizeChartRows || [],
-          sizeChartTitle: optimizedSettings.sizeChartTitle || '',
-          sizeChartSubtitle: optimizedSettings.sizeChartSubtitle || '',
-          sizeChartDisplayMode: optimizedSettings.sizeChartDisplayMode || 'image',
-          updatedAt: nowIso,
-        }),
-        { merge: true }
+      writePromises.push(
+        safeSetDocWithTimeout(
+          sizeChartDocRef,
+          cleanFirestoreData({
+            sizeChartImage: optimizedSettings.sizeChartImage || '',
+            sizeChartRows: optimizedSettings.sizeChartRows || [],
+            sizeChartTitle: optimizedSettings.sizeChartTitle || '',
+            sizeChartSubtitle: optimizedSettings.sizeChartSubtitle || '',
+            sizeChartDisplayMode: optimizedSettings.sizeChartDisplayMode || 'image',
+            updatedAt: nowIso,
+          }),
+          2000
+        )
       );
-    } catch (scErr) {
-      console.warn('Size chart cloud write note:', scErr);
     }
 
-    // Main site config document - strip giant data URLs to guarantee document stays under 20KB
-    try {
-      const siteConfigPayload: any = {
-        ...optimizedSettings,
-        heroBanners: (optimizedSettings.heroBanners || []).map((b) =>
-          typeof b === 'string' && b.startsWith('data:image') && b.length > 2000 ? '' : b
-        ),
-        heroBannerImg:
-          typeof optimizedSettings.heroBannerImg === 'string' &&
-          optimizedSettings.heroBannerImg.startsWith('data:image') &&
-          optimizedSettings.heroBannerImg.length > 2000
-            ? ''
-            : optimizedSettings.heroBannerImg,
-        products: (optimizedSettings.products || []).map((p) => ({
-          ...p,
-          image: typeof p.image === 'string' && p.image.startsWith('data:image') && p.image.length > 2000 ? '' : p.image,
-        })),
-        sizeChartImage:
-          typeof optimizedSettings.sizeChartImage === 'string' &&
-          optimizedSettings.sizeChartImage.startsWith('data:image') &&
-          optimizedSettings.sizeChartImage.length > 2000
-            ? ''
-            : optimizedSettings.sizeChartImage,
-        updatedAt: nowIso,
-      };
-      const docRef = doc(db, 'settings', 'site_config');
-      await setDoc(docRef, cleanFirestoreData(siteConfigPayload), { merge: true });
-    } catch (siteErr) {
-      console.warn('Site config cloud write note:', siteErr);
-    }
-
+    await Promise.allSettled(writePromises);
     return { success: true };
   } catch (err: any) {
     if (isFirestoreQuotaError(err)) {

@@ -66,9 +66,12 @@ export const Hero: React.FC<HeroProps> = ({
   return (
     <section className="relative mb-3">
       {/* Top Hero Text Header */}
-      <div className="bg-gradient-to-b from-black/90 via-[#990838] to-[#db1250] text-center mt-2.5 pt-3 pb-3.5 px-4 text-white shadow-md">
-        <h2 className="text-2xl sm:text-3xl md:text-[32px] font-extrabold leading-snug font-['Baloo_Da_2',sans-serif] tracking-wide">
-          {headline} <span className="text-yellow-300 drop-shadow-xs">{highlight}</span>
+      <div className="bg-gradient-to-b from-black/90 via-[#990838] to-[#db1250] text-center mt-2.5 pt-3 pb-3.5 px-4 text-white shadow-md overflow-hidden">
+        <h2 className="text-2xl sm:text-3xl md:text-[32px] font-extrabold leading-snug font-['Baloo_Da_2',sans-serif] tracking-wide text-white">
+          {headline}{' '}
+          <span className="text-white drop-shadow-xs inline-block translate-x-6 sm:translate-x-8 pl-3">
+            {highlight}
+          </span>
         </h2>
       </div>
 
