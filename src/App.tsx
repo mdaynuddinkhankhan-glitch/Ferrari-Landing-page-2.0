@@ -16,7 +16,7 @@ import { ShirtColorId, ShirtSize, OrderConfirmation } from './types';
 import { getStoredSettings, subscribeToSiteSettings, SiteSettings } from './utils/siteSettings';
 import { testConnection } from './lib/firebase';
 import { recordWebsiteVisit } from './services/visitorService';
-import { syncPixelsFromSettings, trackPageView, trackViewContent } from './utils/pixelTracking';
+import { syncPixelsFromSettings, trackPageView, trackViewContent, trackInitiateCheckout } from './utils/pixelTracking';
 
 export default function App() {
   // Dynamic editable site settings (products, images, prices, texts) synchronized with cloud database
@@ -34,11 +34,13 @@ export default function App() {
 
   // Synchronize and initialize Meta (Facebook) and TikTok pixels for website visitors
   useEffect(() => {
-    if (!checkIsAdminUrl() && siteSettings) {
+    if (siteSettings) {
       syncPixelsFromSettings(siteSettings);
-      trackPageView();
-      if (siteSettings.products && siteSettings.products.length > 0) {
-        trackViewContent('Ferrari Racing Jacket', siteSettings.products[0].price);
+      if (!checkIsAdminUrl()) {
+        trackPageView();
+        if (siteSettings.products && siteSettings.products.length > 0) {
+          trackViewContent('Ferrari Racing Jacket', siteSettings.products[0].price);
+        }
       }
     }
   }, [
@@ -167,6 +169,10 @@ export default function App() {
 
   // Smooth scroll to color selection
   const scrollToColorSection = () => {
+    try {
+      const price = siteSettings.products?.[0]?.price || 1650;
+      trackInitiateCheckout(price, 1);
+    } catch {}
     const el = document.getElementById('colorSection');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -175,6 +181,10 @@ export default function App() {
 
   // Smooth scroll to order form
   const scrollToOrderForm = () => {
+    try {
+      const price = siteSettings.products?.[0]?.price || 1650;
+      trackInitiateCheckout(price, 1);
+    } catch {}
     const el = document.getElementById('orderSection');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });

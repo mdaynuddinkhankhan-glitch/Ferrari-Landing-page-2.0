@@ -6,6 +6,7 @@ import { formatTaka } from '../utils/bengali';
 import { getStoredSettings } from '../utils/siteSettings';
 import { Check, ShoppingBag, ShieldCheck, Phone, MapPin, Package } from 'lucide-react';
 import { CelebrationConfetti } from './CelebrationConfetti';
+import { trackPurchase } from '../utils/pixelTracking';
 
 interface OrderSuccessPageProps {
   order: OrderConfirmation;
@@ -62,7 +63,28 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({ order, produ
     } catch {
       window.scrollTo(0, 0);
     }
-  }, []);
+
+    try {
+      const trackingKey = 'tracked_purchase_' + order.orderId;
+      if (typeof window !== 'undefined' && !sessionStorage.getItem(trackingKey)) {
+        sessionStorage.setItem(trackingKey, '1');
+        const itemCount = displayItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+        trackPurchase(
+          {
+            orderId: order.orderId,
+            customerName: order.customerName,
+            customerPhone: order.customerPhone,
+            total: order.total,
+            subtotal: order.subtotal,
+            numItems: itemCount || 1,
+          },
+          getStoredSettings()
+        ).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Order success purchase tracking note:', e);
+    }
+  }, [order.orderId]);
 
   return (
     <div className="min-h-screen bg-[#072d24] flex flex-col justify-between relative overflow-hidden">

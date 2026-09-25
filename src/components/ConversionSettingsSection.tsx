@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SiteSettings } from '../utils/siteSettings';
 import { 
   ArrowLeft, 
@@ -18,7 +18,12 @@ import {
   initFacebookPixel, 
   initTikTokPixel, 
   trackPageView, 
-  trackPurchase 
+  trackViewContent,
+  trackAddToCart,
+  trackInitiateCheckout,
+  trackPurchase,
+  cleanFacebookPixelId,
+  cleanTikTokPixelId
 } from '../utils/pixelTracking';
 
 interface ConversionSettingsSectionProps {
@@ -43,6 +48,16 @@ export const ConversionSettingsSection: React.FC<ConversionSettingsSectionProps>
   const [ttAccessToken, setTtAccessToken] = useState(settings.ttAccessToken || '');
   const [ttTestEventCode, setTtTestEventCode] = useState(settings.ttTestEventCode || '');
 
+  // Synchronize when settings are loaded or updated
+  useEffect(() => {
+    if (settings.fbPixelId !== undefined) setFbPixelId(settings.fbPixelId);
+    if (settings.fbAccessToken !== undefined) setFbAccessToken(settings.fbAccessToken);
+    if (settings.fbTestEventCode !== undefined) setFbTestEventCode(settings.fbTestEventCode);
+    if (settings.ttPixelId !== undefined) setTtPixelId(settings.ttPixelId);
+    if (settings.ttAccessToken !== undefined) setTtAccessToken(settings.ttAccessToken);
+    if (settings.ttTestEventCode !== undefined) setTtTestEventCode(settings.ttTestEventCode);
+  }, [settings]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'fb' | 'tt'; message: string } | null>(null);
   const [showGuide, setShowGuide] = useState(false);
@@ -60,22 +75,29 @@ export const ConversionSettingsSection: React.FC<ConversionSettingsSectionProps>
 
   const handleUpdate = () => {
     setIsSaving(true);
+    const cleanedFb = cleanFacebookPixelId(fbPixelId);
+    const cleanedTt = cleanTikTokPixelId(ttPixelId);
+
     const updated: SiteSettings = {
       ...settings,
-      fbPixelId: fbPixelId.trim(),
+      fbPixelId: cleanedFb,
       fbAccessToken: fbAccessToken.trim(),
       fbTestEventCode: fbTestEventCode.trim(),
-      ttPixelId: ttPixelId.trim(),
+      ttPixelId: cleanedTt,
       ttAccessToken: ttAccessToken.trim(),
       ttTestEventCode: ttTestEventCode.trim(),
     };
 
+    // Update form state with cleaned IDs
+    setFbPixelId(cleanedFb);
+    setTtPixelId(cleanedTt);
+
     // Initialize in browser immediately
-    if (updated.fbPixelId) {
-      initFacebookPixel(updated.fbPixelId, updated.fbTestEventCode);
+    if (cleanedFb) {
+      initFacebookPixel(cleanedFb, updated.fbTestEventCode);
     }
-    if (updated.ttPixelId) {
-      initTikTokPixel(updated.ttPixelId, updated.ttTestEventCode);
+    if (cleanedTt) {
+      initTikTokPixel(cleanedTt, updated.ttTestEventCode);
     }
 
     onSaveSettings(updated);
@@ -89,65 +111,75 @@ export const ConversionSettingsSection: React.FC<ConversionSettingsSectionProps>
   };
 
   const handleTestFacebook = () => {
-    if (!fbPixelId.trim()) {
+    const cleaned = cleanFacebookPixelId(fbPixelId);
+    if (!cleaned) {
       setTestResult({
         type: 'fb',
         message: 'অনুগ্রহ করে প্রথমে Facebook Pixel ID দিন এবং Update বাটনে ক্লিক করুন।',
       });
       return;
     }
-    initFacebookPixel(fbPixelId.trim(), fbTestEventCode.trim());
+    const testCode = fbTestEventCode.trim();
+    initFacebookPixel(cleaned, testCode);
     trackPageView();
+    trackViewContent('Black Ferrari Jacket', 1650);
+    trackAddToCart('Black Ferrari Jacket', 1650, 1);
+    trackInitiateCheckout(1730, 1);
     trackPurchase(
       {
         orderId: '#TEST-' + Math.floor(1000 + Math.random() * 9000),
         customerName: 'Test Customer',
         customerPhone: '01700000000',
-        total: 1250,
+        total: 1730,
       },
       {
         ...settings,
-        fbPixelId: fbPixelId.trim(),
+        fbPixelId: cleaned,
         fbAccessToken: fbAccessToken.trim(),
-        fbTestEventCode: fbTestEventCode.trim(),
+        fbTestEventCode: testCode,
       }
     );
     setTestResult({
       type: 'fb',
-      message: 'টেস্ট ইভেন্ট (PageView & Purchase) সফলভাবে পাঠানো হয়েছে! আপনার Meta Events Manager-এ টেস্ট ইভেন্ট চেক করুন।',
+      message: `টেস্ট ইভেন্ট (PageView, ViewContent, AddToCart, InitiateCheckout & Purchase) সফলভাবে মেটায় পাঠানো হয়েছে! ${testCode ? `(Test Code: ${testCode})` : ''} আপনার Meta Events Manager-এ টেস্ট ইভেন্ট চেক করুন।`,
     });
-    setTimeout(() => setTestResult(null), 6000);
+    setTimeout(() => setTestResult(null), 8000);
   };
 
   const handleTestTikTok = () => {
-    if (!ttPixelId.trim()) {
+    const cleaned = cleanTikTokPixelId(ttPixelId);
+    if (!cleaned) {
       setTestResult({
         type: 'tt',
         message: 'অনুগ্রহ করে প্রথমে TikTok Pixel ID দিন এবং Update বাটনে ক্লিক করুন।',
       });
       return;
     }
-    initTikTokPixel(ttPixelId.trim(), ttTestEventCode.trim());
+    const testCode = ttTestEventCode.trim();
+    initTikTokPixel(cleaned, testCode);
     trackPageView();
+    trackViewContent('Black Ferrari Jacket', 1650);
+    trackAddToCart('Black Ferrari Jacket', 1650, 1);
+    trackInitiateCheckout(1730, 1);
     trackPurchase(
       {
         orderId: '#TEST-' + Math.floor(1000 + Math.random() * 9000),
         customerName: 'Test Customer',
         customerPhone: '01700000000',
-        total: 1250,
+        total: 1730,
       },
       {
         ...settings,
-        ttPixelId: ttPixelId.trim(),
+        ttPixelId: cleaned,
         ttAccessToken: ttAccessToken.trim(),
-        ttTestEventCode: ttTestEventCode.trim(),
+        ttTestEventCode: testCode,
       }
     );
     setTestResult({
       type: 'tt',
-      message: 'TikTok টেস্ট ইভেন্ট পাঠানো হয়েছে! আপনার TikTok Ads Manager-এ Events Manager চেক করুন।',
+      message: 'TikTok টেস্ট ইভেন্ট সফলভাবে পাঠানো হয়েছে! আপনার TikTok Ads Manager-এ Events Manager চেক করুন।',
     });
-    setTimeout(() => setTestResult(null), 6000);
+    setTimeout(() => setTestResult(null), 8000);
   };
 
   const isFbActive = Boolean(fbPixelId.trim());

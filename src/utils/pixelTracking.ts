@@ -2,7 +2,7 @@
  * Real Meta (Facebook) & TikTok Pixel tracking engine
  * Supports client-side JS SDK injection, event dispatching, and Conversions API.
  */
-import { SiteSettings } from './siteSettings';
+import { SiteSettings, getStoredSettings } from './siteSettings';
 
 declare global {
   interface Window {
@@ -26,22 +26,44 @@ async function sha256(message: string): Promise<string> {
 
 let fbInitializedId: string | null = null;
 let ttInitializedId: string | null = null;
+let activeFbTestCode: string | null = null;
+let activeTtTestCode: string | null = null;
 
 /**
- * Initialize Facebook Pixel on the page with real JS script
+ * Clean & normalize a Facebook Pixel ID
+ * Extracts pure digits (handles accidentally pasted "Pixel ID: 123456789012345" or quotes)
+ */
+export function cleanFacebookPixelId(rawId?: string | null): string {
+  if (!rawId) return '';
+  const str = String(rawId).trim();
+  const digitsOnly = str.replace(/[^0-9]/g, '');
+  return digitsOnly.length >= 10 ? digitsOnly : str;
+}
+
+/**
+ * Clean & normalize a TikTok Pixel ID
+ */
+export function cleanTikTokPixelId(rawId?: string | null): string {
+  if (!rawId) return '';
+  return String(rawId).replace(/[^a-zA-Z0-9_-]/g, '').trim();
+}
+
+/**
+ * Initialize Facebook Pixel on the page with real JS SDK & noscript fallback
  */
 export function initFacebookPixel(pixelId: string, testEventCode?: string): void {
   if (!pixelId || typeof window === 'undefined') return;
 
-  const cleanId = pixelId.trim();
+  const cleanId = cleanFacebookPixelId(pixelId);
   if (!cleanId) return;
 
+  if (testEventCode && testEventCode.trim()) {
+    activeFbTestCode = testEventCode.trim();
+  }
+
   try {
-    // If already loaded for this pixel ID, just set test event code if needed
+    // If already loaded for this pixel ID, just update test event code
     if (window.fbq && fbInitializedId === cleanId) {
-      if (testEventCode && testEventCode.trim()) {
-        window.fbq('set', 'testEventCode', testEventCode.trim());
-      }
       return;
     }
 
@@ -73,12 +95,25 @@ export function initFacebookPixel(pixelId: string, testEventCode?: string): void
     window.fbq('init', cleanId);
     fbInitializedId = cleanId;
 
-    if (testEventCode && testEventCode.trim()) {
-      window.fbq('set', 'testEventCode', testEventCode.trim());
-    }
+    // Attach standard noscript fallback beacon
+    try {
+      const existingNoscript = document.getElementById('meta-pixel-noscript');
+      if (!existingNoscript && document.body) {
+        const noscript = document.createElement('noscript');
+        noscript.id = 'meta-pixel-noscript';
+        const img = document.createElement('img');
+        img.height = 1;
+        img.width = 1;
+        img.style.display = 'none';
+        img.src = `https://www.facebook.com/tr?id=${cleanId}&ev=PageView&noscript=1`;
+        noscript.appendChild(img);
+        document.body.appendChild(noscript);
+      }
+    } catch {}
 
-    window.fbq('track', 'PageView');
-    console.log(`[Pixel] Facebook Pixel initialized successfully: ${cleanId}`);
+    const options = activeFbTestCode ? { test_event_code: activeFbTestCode } : {};
+    window.fbq('track', 'PageView', {}, options);
+    console.log(`[Pixel] Facebook Pixel initialized successfully: ${cleanId}${activeFbTestCode ? ` (Test Code: ${activeFbTestCode})` : ''}`);
   } catch (err) {
     console.warn('[Pixel] Facebook Pixel initialization warning:', err);
   }
@@ -90,8 +125,12 @@ export function initFacebookPixel(pixelId: string, testEventCode?: string): void
 export function initTikTokPixel(pixelId: string, testEventCode?: string): void {
   if (!pixelId || typeof window === 'undefined') return;
 
-  const cleanId = pixelId.trim();
+  const cleanId = cleanTikTokPixelId(pixelId);
   if (!cleanId) return;
+
+  if (testEventCode && testEventCode.trim()) {
+    activeTtTestCode = testEventCode.trim();
+  }
 
   try {
     if (window.ttq && ttInitializedId === cleanId) {
@@ -164,6 +203,23 @@ export function initTikTokPixel(pixelId: string, testEventCode?: string): void {
 }
 
 /**
+ * Ensure pixels are active based on stored or provided settings
+ */
+function ensurePixelsActive(): void {
+  try {
+    if (!fbInitializedId || !ttInitializedId) {
+      const stored = getStoredSettings();
+      if (!fbInitializedId && stored.fbPixelId) {
+        initFacebookPixel(stored.fbPixelId, stored.fbTestEventCode);
+      }
+      if (!ttInitializedId && stored.ttPixelId) {
+        initTikTokPixel(stored.ttPixelId, stored.ttTestEventCode);
+      }
+    }
+  } catch {}
+}
+
+/**
  * Sync pixels from SiteSettings
  */
 export function syncPixelsFromSettings(settings: SiteSettings): void {
@@ -179,10 +235,12 @@ export function syncPixelsFromSettings(settings: SiteSettings): void {
  * Track PageView event
  */
 export function trackPageView(): void {
+  ensurePixelsActive();
   try {
     if (typeof window !== 'undefined') {
+      const options = activeFbTestCode ? { test_event_code: activeFbTestCode } : {};
       if (window.fbq) {
-        window.fbq('track', 'PageView');
+        window.fbq('track', 'PageView', {}, options);
       }
       if (window.ttq) {
         window.ttq.page();
@@ -197,15 +255,23 @@ export function trackPageView(): void {
  * Track ViewContent event
  */
 export function trackViewContent(productName: string, price: number): void {
+  ensurePixelsActive();
   try {
     if (typeof window !== 'undefined') {
+      const options = activeFbTestCode ? { test_event_code: activeFbTestCode } : {};
       if (window.fbq) {
-        window.fbq('track', 'ViewContent', {
-          content_name: productName,
-          content_category: 'Apparel & Accessories > Clothing > Jackets & Coats',
-          value: price,
-          currency: 'BDT',
-        });
+        window.fbq(
+          'track',
+          'ViewContent',
+          {
+            content_name: productName,
+            content_type: 'product',
+            content_category: 'Apparel & Accessories > Clothing > Jackets & Coats',
+            value: price,
+            currency: 'BDT',
+          },
+          options
+        );
       }
       if (window.ttq) {
         window.ttq.track('ViewContent', {
@@ -225,15 +291,23 @@ export function trackViewContent(productName: string, price: number): void {
  * Track AddToCart event
  */
 export function trackAddToCart(productName: string, price: number, quantity = 1): void {
+  ensurePixelsActive();
   try {
     if (typeof window !== 'undefined') {
+      const options = activeFbTestCode ? { test_event_code: activeFbTestCode } : {};
       if (window.fbq) {
-        window.fbq('track', 'AddToCart', {
-          content_name: productName,
-          value: price * quantity,
-          currency: 'BDT',
-          quantity,
-        });
+        window.fbq(
+          'track',
+          'AddToCart',
+          {
+            content_name: productName,
+            content_type: 'product',
+            value: price * quantity,
+            currency: 'BDT',
+            quantity,
+          },
+          options
+        );
       }
       if (window.ttq) {
         window.ttq.track('AddToCart', {
@@ -253,14 +327,22 @@ export function trackAddToCart(productName: string, price: number, quantity = 1)
  * Track InitiateCheckout event
  */
 export function trackInitiateCheckout(total: number, numItems = 1): void {
+  ensurePixelsActive();
   try {
     if (typeof window !== 'undefined') {
+      const options = activeFbTestCode ? { test_event_code: activeFbTestCode } : {};
       if (window.fbq) {
-        window.fbq('track', 'InitiateCheckout', {
-          value: total,
-          currency: 'BDT',
-          num_items: numItems,
-        });
+        window.fbq(
+          'track',
+          'InitiateCheckout',
+          {
+            content_name: 'Ferrari Racing Jacket',
+            value: total,
+            currency: 'BDT',
+            num_items: numItems,
+          },
+          options
+        );
       }
       if (window.ttq) {
         window.ttq.track('InitiateCheckout', {
@@ -290,18 +372,41 @@ export async function trackPurchase(
   settings?: SiteSettings
 ): Promise<void> {
   const { orderId, customerName, customerPhone, total, numItems = 1 } = order;
+  const currentSettings = settings || getStoredSettings();
+
+  if (currentSettings.fbPixelId && !fbInitializedId) {
+    initFacebookPixel(currentSettings.fbPixelId, currentSettings.fbTestEventCode);
+  }
+  if (currentSettings.ttPixelId && !ttInitializedId) {
+    initTikTokPixel(currentSettings.ttPixelId, currentSettings.ttTestEventCode);
+  }
+
+  const effectiveFbTestCode = currentSettings.fbTestEventCode?.trim() || activeFbTestCode || undefined;
+  const effectiveTtTestCode = currentSettings.ttTestEventCode?.trim() || activeTtTestCode || undefined;
 
   // 1. Client-Side Facebook Pixel Purchase
   try {
     if (typeof window !== 'undefined' && window.fbq) {
-      window.fbq('track', 'Purchase', {
-        value: total,
-        currency: 'BDT',
-        content_name: 'Ferrari Racing Jacket',
-        content_type: 'product',
-        order_id: orderId,
-        num_items: numItems,
-      });
+      const fbOptions: any = {
+        eventID: orderId,
+      };
+      if (effectiveFbTestCode) {
+        fbOptions.test_event_code = effectiveFbTestCode;
+      }
+
+      window.fbq(
+        'track',
+        'Purchase',
+        {
+          value: total,
+          currency: 'BDT',
+          content_name: 'Ferrari Racing Jacket',
+          content_type: 'product',
+          order_id: orderId,
+          num_items: numItems,
+        },
+        fbOptions
+      );
       console.log(`[Pixel] Facebook Purchase event tracked: ${orderId}, ৳${total}`);
     }
   } catch (err) {
@@ -311,18 +416,26 @@ export async function trackPurchase(
   // 2. Client-Side TikTok Pixel CompletePayment & PlaceAnOrder
   try {
     if (typeof window !== 'undefined' && window.ttq) {
-      window.ttq.track('PlaceAnOrder', {
-        value: total,
-        currency: 'BDT',
-        order_id: orderId,
-        quantity: numItems,
-      });
-      window.ttq.track('CompletePayment', {
-        value: total,
-        currency: 'BDT',
-        order_id: orderId,
-        quantity: numItems,
-      });
+      window.ttq.track(
+        'PlaceAnOrder',
+        {
+          value: total,
+          currency: 'BDT',
+          order_id: orderId,
+          quantity: numItems,
+        },
+        { event_id: orderId }
+      );
+      window.ttq.track(
+        'CompletePayment',
+        {
+          value: total,
+          currency: 'BDT',
+          order_id: orderId,
+          quantity: numItems,
+        },
+        { event_id: orderId }
+      );
       console.log(`[Pixel] TikTok CompletePayment event tracked: ${orderId}, ৳${total}`);
     }
   } catch (err) {
@@ -330,7 +443,8 @@ export async function trackPurchase(
   }
 
   // 3. Meta Conversions API (Server-Side direct Graph API call if fbAccessToken is present)
-  if (settings?.fbPixelId && settings?.fbAccessToken) {
+  const cleanFbId = cleanFacebookPixelId(currentSettings.fbPixelId);
+  if (cleanFbId && currentSettings.fbAccessToken) {
     try {
       const hashedPhone = await sha256(customerPhone.replace(/\D/g, ''));
       const hashedName = await sha256(customerName);
@@ -357,11 +471,11 @@ export async function trackPurchase(
         ],
       };
 
-      if (settings.fbTestEventCode && settings.fbTestEventCode.trim()) {
-        payload.test_event_code = settings.fbTestEventCode.trim();
+      if (effectiveFbTestCode) {
+        payload.test_event_code = effectiveFbTestCode;
       }
 
-      const fbUrl = `https://graph.facebook.com/v21.0/${settings.fbPixelId.trim()}/events?access_token=${settings.fbAccessToken.trim()}`;
+      const fbUrl = `https://graph.facebook.com/v21.0/${cleanFbId}/events?access_token=${currentSettings.fbAccessToken.trim()}`;
       fetch(fbUrl, {
         method: 'POST',
         headers: {
@@ -374,22 +488,23 @@ export async function trackPurchase(
           console.log('[Pixel] Meta Conversions API response:', resData);
         })
         .catch((capiErr) => {
-          console.warn('[Pixel] Meta Conversions API request error:', capiErr);
+          console.warn('[Pixel] Meta Conversions API note:', capiErr);
         });
     } catch (err) {
-      console.warn('[Pixel] CAPI payload creation error:', err);
+      console.warn('[Pixel] CAPI payload note:', err);
     }
   }
 
   // 4. TikTok Events API (Server-Side direct API call if ttAccessToken is present)
-  if (settings?.ttPixelId && settings?.ttAccessToken) {
+  const cleanTtId = cleanTikTokPixelId(currentSettings.ttPixelId);
+  if (cleanTtId && currentSettings.ttAccessToken) {
     try {
       const hashedPhone = await sha256(customerPhone.replace(/\D/g, ''));
       const currentTimestamp = Math.floor(Date.now() / 1000);
 
       const ttPayload: any = {
         event_source: 'web',
-        event_source_id: settings.ttPixelId.trim(),
+        event_source_id: cleanTtId,
         data: [
           {
             event: 'CompletePayment',
@@ -406,15 +521,15 @@ export async function trackPurchase(
         ],
       };
 
-      if (settings.ttTestEventCode && settings.ttTestEventCode.trim()) {
-        ttPayload.test_event_code = settings.ttTestEventCode.trim();
+      if (effectiveTtTestCode) {
+        ttPayload.test_event_code = effectiveTtTestCode;
       }
 
       fetch('https://business-api.tiktok.com/open_api/v1.3/event/track/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Access-Token': settings.ttAccessToken.trim(),
+          'Access-Token': currentSettings.ttAccessToken.trim(),
         },
         body: JSON.stringify(ttPayload),
       })
@@ -423,10 +538,10 @@ export async function trackPurchase(
           console.log('[Pixel] TikTok Events API response:', resData);
         })
         .catch((ttErr) => {
-          console.warn('[Pixel] TikTok Events API request error:', ttErr);
+          console.warn('[Pixel] TikTok Events API note:', ttErr);
         });
     } catch (err) {
-      console.warn('[Pixel] TikTok Events API error:', err);
+      console.warn('[Pixel] TikTok Events API note:', err);
     }
   }
 }
