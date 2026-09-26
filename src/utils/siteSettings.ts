@@ -14,7 +14,6 @@ import {
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
 import { compressDataUrl } from './imageCompressor';
-import { getApiUrl } from '../services/apiConfig';
 
 export interface SizeChartRowItem {
   id?: string;
@@ -276,16 +275,16 @@ export function cleanFirestoreData(data: any): any {
 
 export async function prepareCompressedSettings(
   settings: SiteSettings,
-  bannerDimension = 1200,
-  bannerQuality = 0.82,
-  productDimension = 800,
-  productQuality = 0.80
+  bannerDimension = 1000,
+  bannerQuality = 0.80,
+  productDimension = 700,
+  productQuality = 0.75
 ): Promise<SiteSettings> {
   const compressedBanners: string[] = [];
   const rawBanners = settings.heroBanners || (settings.heroBannerImg ? [settings.heroBannerImg] : []);
   for (const b of rawBanners) {
     if (b && typeof b === 'string') {
-      if (b.startsWith('data:image') && b.length > 250000) {
+      if (b.startsWith('data:image')) {
         const comp = await compressDataUrl(b, bannerDimension, bannerQuality, false);
         compressedBanners.push(comp);
       } else {
@@ -297,7 +296,7 @@ export async function prepareCompressedSettings(
   const compressedProducts = await Promise.all(
     (settings.products || []).map(async (p) => {
       let img = p.image;
-      if (img && typeof img === 'string' && img.startsWith('data:image') && img.length > 250000) {
+      if (img && typeof img === 'string' && img.startsWith('data:image')) {
         img = await compressDataUrl(img, productDimension, productQuality, false);
       }
       return {
@@ -313,8 +312,8 @@ export async function prepareCompressedSettings(
     heroBanners: compressedBanners.length > 0 ? compressedBanners : settings.heroBanners,
     products: compressedProducts,
     sizeChartImage:
-      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image') && settings.sizeChartImage.length > 250000
-        ? await compressDataUrl(settings.sizeChartImage, 1000, 0.80, false)
+      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image')
+        ? await compressDataUrl(settings.sizeChartImage, 900, 0.75, false)
         : settings.sizeChartImage,
   };
 }
@@ -369,7 +368,7 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     // 2. PRIMARY: Save to Central Server API & AWAIT response!
     let serverSaveSuccess = false;
     try {
-      const res = await fetch(getApiUrl('/api/settings'), {
+      const res = await fetch('/api/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -557,7 +556,7 @@ export function subscribeToSiteSettings(
   // 1. Fetch fresh settings from central server API immediately with cache-busting
   const fetchServerSettings = async () => {
     try {
-      const res = await fetch(getApiUrl(`/api/settings?_t=${Date.now()}`), {
+      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
@@ -585,7 +584,7 @@ export function subscribeToSiteSettings(
   let eventSource: EventSource | null = null;
   if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
     try {
-      eventSource = new EventSource(getApiUrl('/api/settings/stream'));
+      eventSource = new EventSource('/api/settings/stream');
       eventSource.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);
