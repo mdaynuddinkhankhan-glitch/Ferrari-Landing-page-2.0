@@ -6,6 +6,8 @@ import {
   getStoredSettings, 
   saveStoredSettings, 
   subscribeToSiteSettings,
+  markLocalUserEditing,
+  clearLocalUserEditing,
   DEFAULT_SITE_SETTINGS 
 } from '../utils/siteSettings';
 import { compressImageFile, compressDataUrl } from '../utils/imageCompressor';
@@ -1292,6 +1294,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleProductImageUpload = async (index: number, rawDataUrl: string) => {
     lastLocalEditTimestampRef.current = Date.now();
+    markLocalUserEditing();
     setUploadingProductIdx(index);
     try {
       let finalImgUrl = rawDataUrl;
@@ -1317,12 +1320,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onSettingsUpdate(updatedSettings);
       }
       const res = await saveStoredSettings(updatedSettings);
+      clearLocalUserEditing();
       if (res.success) {
         showSuccessBanner(`প্রোডাক্ট ${index + 1} এর ছবি সফলভাবে ক্লাউডে সেভ হয়েছে এবং সব ডিভাইসে লাইভ হয়েছে!`);
       } else {
         showSuccessBanner(`প্রোডাক্ট ${index + 1} এর ছবি আপডেট হয়েছে!`);
       }
     } catch (err: any) {
+      clearLocalUserEditing();
       showErrorBanner(`ছবি আপলোড ত্রুটি: ${err?.message || 'পুনরায় চেষ্টা করুন'}`);
     } finally {
       setUploadingProductIdx(null);

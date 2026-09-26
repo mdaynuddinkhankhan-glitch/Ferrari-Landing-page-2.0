@@ -489,6 +489,16 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
   }
 }
 
+let activeUserEditTimestamp = 0;
+
+export function markLocalUserEditing(): void {
+  activeUserEditTimestamp = Date.now();
+}
+
+export function clearLocalUserEditing(): void {
+  activeUserEditTimestamp = 0;
+}
+
 /**
  * Real-time listener for site settings from Backend API, Server-Sent Events (SSE), and Firestore.
  * Ensures that all updates made from ANY phone immediately sync to ALL phones in real-time across the world.
@@ -502,23 +512,20 @@ export function subscribeToSiteSettings(
   const applyNewSettings = (incoming: any) => {
     if (!incoming || typeof incoming !== 'object') return;
 
-    // Check timestamps: Never overwrite newer local edits with older incoming data!
-    try {
-      const localMs = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
-      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : 0);
-      const now = Date.now();
-
-      // If local was modified very recently and local timestamp is newer, protect local state
-      if (localMs > incomingMs && now - localMs < 8000) {
+    // Only protect if THIS exact browser tab is actively editing right this second
+    const now = Date.now();
+    if (activeUserEditTimestamp > 0 && now - activeUserEditTimestamp < 3500) {
+      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
+      if (incomingMs < activeUserEditTimestamp) {
         return;
       }
-    } catch {}
+    }
 
     const merged = sanitizeAndMergeSettings(incoming);
 
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
-      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : Date.now());
+      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || Date.now();
       localStorage.setItem('porshibari_settings_last_modified', String(incomingMs));
     } catch {}
 

@@ -120,14 +120,18 @@ app.post('/api/upload', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'No image data provided' });
     }
 
-    const matches = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
-    if (!matches) {
+    const commaIdx = dataUrl.indexOf(',');
+    if (commaIdx === -1 || !dataUrl.startsWith('data:image')) {
       return res.status(400).json({ success: false, error: 'Invalid base64 image data' });
     }
 
-    const extRaw = matches[1].toLowerCase();
+    const metaPart = dataUrl.slice(0, commaIdx);
+    const base64Data = dataUrl.slice(commaIdx + 1);
+
+    const mimeMatch = metaPart.match(/data:image\/([a-zA-Z0-9+.-]+)/);
+    const extRaw = (mimeMatch ? mimeMatch[1] : 'webp').toLowerCase();
     const ext = extRaw === 'jpeg' ? 'jpg' : extRaw === 'octet-stream' ? 'webp' : extRaw;
-    const buffer = Buffer.from(matches[2], 'base64');
+    const buffer = Buffer.from(base64Data, 'base64');
     const safeFolder = folder ? String(folder).replace(/[^a-zA-Z0-9_-]/g, '') : 'general';
     const targetFolder = path.join(UPLOADS_DIR, safeFolder);
 
