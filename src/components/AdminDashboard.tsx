@@ -234,6 +234,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const addBannerFileInputRef = useRef<HTMLInputElement>(null);
   const replaceBannerFileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const productFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const lastLocalEditTimestampRef = useRef<number>(0);
 
   // Ensure banners list is array
   const currentBanners = Array.isArray(settings.heroBanners) && settings.heroBanners.length > 0
@@ -241,6 +242,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     : [settings.heroBannerImg];
 
   const handleAddBanner = async (newBannerUrl: string) => {
+    lastLocalEditTimestampRef.current = Date.now();
     const updatedList = [...(settings.heroBanners || [settings.heroBannerImg]), newBannerUrl];
     const newSettings: SiteSettings = {
       ...settings,
@@ -248,10 +250,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       heroBannerImg: updatedList[0],
     };
     setSettings(newSettings);
+    if (onSettingsUpdate) onSettingsUpdate(newSettings);
     showSuccessBanner('নতুন ব্যানার সেভ হচ্ছে...');
     const res = await saveStoredSettings(newSettings);
     if (res.success) {
-      if (onSettingsUpdate) onSettingsUpdate(newSettings);
       showSuccessBanner(res.warning || 'নতুন ব্যানার সব ফোনে সাথে সাথে লাইভ হয়েছে!');
     } else {
       showErrorBanner(`ব্যানার সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
@@ -259,6 +261,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleReplaceBanner = async (index: number, newBannerUrl: string) => {
+    lastLocalEditTimestampRef.current = Date.now();
     const updatedList = [...(settings.heroBanners || [settings.heroBannerImg])];
     updatedList[index] = newBannerUrl;
     const newSettings: SiteSettings = {
@@ -267,10 +270,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       heroBannerImg: updatedList[0],
     };
     setSettings(newSettings);
+    if (onSettingsUpdate) onSettingsUpdate(newSettings);
     showSuccessBanner(`ব্যানার ${index + 1} সেভ হচ্ছে...`);
     const res = await saveStoredSettings(newSettings);
     if (res.success) {
-      if (onSettingsUpdate) onSettingsUpdate(newSettings);
       showSuccessBanner(res.warning || `ব্যানার ${index + 1} সব ফোনে সাথে সাথে লাইভ হয়েছে!`);
     } else {
       showErrorBanner(`ব্যানার সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
@@ -278,6 +281,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleRestoreOriginalBanner = async () => {
+    lastLocalEditTimestampRef.current = Date.now();
     const originalBanners = DEFAULT_SITE_SETTINGS.heroBanners || [DEFAULT_SITE_SETTINGS.heroBannerImg];
     const newSettings: SiteSettings = {
       ...settings,
@@ -285,10 +289,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       heroBannerImg: originalBanners[0],
     };
     setSettings(newSettings);
+    if (onSettingsUpdate) onSettingsUpdate(newSettings);
     showSuccessBanner('আসল ক্রিস্টাল ক্লিয়ার ব্যানার রিস্টোর হচ্ছে...');
     const res = await saveStoredSettings(newSettings);
     if (res.success) {
-      if (onSettingsUpdate) onSettingsUpdate(newSettings);
       showSuccessBanner('আসল হাই-ডেফিনিশন ব্যানার সফলভাবে ফিরে এসেছে!');
     } else {
       showErrorBanner(`রিস্টোর ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
@@ -310,6 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setConfirmModal({
       message: `আপনি কি ব্যানার ${index + 1} মুছে ফেলতে চান?`,
       onConfirm: async () => {
+        lastLocalEditTimestampRef.current = Date.now();
         const updatedList = (settings.heroBanners || [settings.heroBannerImg]).filter((_, i) => i !== index);
         const newSettings: SiteSettings = {
           ...settings,
@@ -317,11 +322,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           heroBannerImg: updatedList[0],
         };
         setSettings(newSettings);
+        if (onSettingsUpdate) onSettingsUpdate(newSettings);
         setConfirmModal(null);
         showSuccessBanner('ব্যানার ক্লাউড থেকে আপডেট করা হচ্ছে...');
         const res = await saveStoredSettings(newSettings);
         if (res.success) {
-          if (onSettingsUpdate) onSettingsUpdate(newSettings);
           showSuccessBanner('ব্যানার মুছে সব ফোনে সাথে সাথে আপডেট হয়েছে!');
         }
       },
@@ -378,6 +383,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Synchronize site settings with cloud database in real-time
   useEffect(() => {
     const unsub = subscribeToSiteSettings((cloudSettings) => {
+      // Do not overwrite user changes if user recently made local edits within last 5 seconds
+      if (Date.now() - lastLocalEditTimestampRef.current < 5000) {
+        return;
+      }
       setSettings(cloudSettings);
     });
     return () => {
@@ -1160,10 +1169,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showErrorBanner('দয়া করে একটি সঠিক ছবি (JPG, PNG, WEBP) ফাইল সিলেক্ট করুন।');
       return;
     }
+    lastLocalEditTimestampRef.current = Date.now();
     try {
       showSuccessBanner('ছবি সেন্ট্রাল ক্লাউড স্টোরেজে আপলোড হচ্ছে...');
       const cloudUrl = await uploadImageFileToCloud(file, folder);
-      onComplete(cloudUrl);
+      await onComplete(cloudUrl);
       showSuccessBanner('ছবি সফলভাবে ক্লাউড স্টোরেজে সেভ হয়েছে এবং সব ফোনে লাইভ হয়েছে!');
     } catch (err: any) {
       console.warn('Image upload processing notice:', err);
@@ -1176,6 +1186,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     field: keyof ShirtProduct,
     value: any
   ) => {
+    lastLocalEditTimestampRef.current = Date.now();
     const updatedProducts = [...settings.products];
     updatedProducts[index] = {
       ...updatedProducts[index],
@@ -1206,14 +1217,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleProductImageUpload = async (index: number, rawDataUrl: string) => {
+    lastLocalEditTimestampRef.current = Date.now();
     setUploadingProductIdx(index);
-    showSuccessBanner('প্রোডাক্ট ছবি ক্লাউড স্টোরেজে প্রসেস হচ্ছে...');
     try {
-      const cloudUrl = await uploadDataUrlToCloud(rawDataUrl, 'products');
       const updatedProducts = [...settings.products];
       updatedProducts[index] = {
         ...updatedProducts[index],
-        image: cloudUrl,
+        image: rawDataUrl,
       };
       const updatedSettings: SiteSettings = {
         ...settings,
@@ -4215,7 +4225,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             if (e.target.files?.[0]) {
                               handleFileUpload(e.target.files[0], (dataUrl) => {
                                 handleProductImageUpload(idx, dataUrl);
-                              });
+                              }, 'products');
+                              e.target.value = '';
                             }
                           }}
                         />

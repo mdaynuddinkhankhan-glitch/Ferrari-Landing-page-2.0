@@ -563,53 +563,47 @@ export function subscribeToSiteSettings(
 
     let merged: any;
 
-    if (effectiveLocalTime > 0 && effectiveLocalTime > cloudUpdatedAtMs) {
+    if (effectiveLocalTime > 0 && effectiveLocalTime >= cloudUpdatedAtMs) {
+      // Local changes are newer: preserve local fields as source of truth
       merged = {
         ...(currentSiteConfig || {}),
         ...localStored,
       };
-      saveStoredSettings(localStored).catch(() => {});
     } else {
+      // Cloud changes are newer
       merged = {
         ...localStored,
         ...(currentSiteConfig || {}),
       };
     }
 
-    // Merge banners
-    if (
-      currentBannersConfig?.heroBanners &&
-      Array.isArray(currentBannersConfig.heroBanners) &&
-      currentBannersConfig.heroBanners.length > 0
-    ) {
+    // Merge banners only if cloud is strictly newer than local
+    const bannerCloudTimeRaw = currentBannersConfig?.updatedAtMs || currentBannersConfig?.updatedAt;
+    const bannerCloudTime = bannerCloudTimeRaw ? (typeof bannerCloudTimeRaw === 'number' ? bannerCloudTimeRaw : new Date(bannerCloudTimeRaw).getTime() || 0) : 0;
+    
+    if (bannerCloudTime > effectiveLocalTime && currentBannersConfig?.heroBanners && Array.isArray(currentBannersConfig.heroBanners) && currentBannersConfig.heroBanners.length > 0) {
       merged.heroBanners = currentBannersConfig.heroBanners;
       merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
-    } else if (
-      currentSiteConfig?.heroBanners &&
-      Array.isArray(currentSiteConfig.heroBanners) &&
-      currentSiteConfig.heroBanners.length > 0
-    ) {
-      merged.heroBanners = currentSiteConfig.heroBanners;
-      merged.heroBannerImg = currentSiteConfig.heroBannerImg || currentSiteConfig.heroBanners[0];
+    } else if (localStored.heroBanners && Array.isArray(localStored.heroBanners) && localStored.heroBanners.length > 0) {
+      merged.heroBanners = localStored.heroBanners;
+      merged.heroBannerImg = localStored.heroBannerImg || localStored.heroBanners[0];
     }
 
-    // Merge products
-    if (
-      currentProductsConfig?.products &&
-      Array.isArray(currentProductsConfig.products) &&
-      currentProductsConfig.products.length > 0
-    ) {
+    // Merge products only if cloud is strictly newer than local
+    const productCloudTimeRaw = currentProductsConfig?.updatedAtMs || currentProductsConfig?.updatedAt;
+    const productCloudTime = productCloudTimeRaw ? (typeof productCloudTimeRaw === 'number' ? productCloudTimeRaw : new Date(productCloudTimeRaw).getTime() || 0) : 0;
+
+    if (productCloudTime > effectiveLocalTime && currentProductsConfig?.products && Array.isArray(currentProductsConfig.products) && currentProductsConfig.products.length > 0) {
       merged.products = currentProductsConfig.products;
-    } else if (
-      currentSiteConfig?.products &&
-      Array.isArray(currentSiteConfig.products) &&
-      currentSiteConfig.products.length > 0
-    ) {
-      merged.products = currentSiteConfig.products;
+    } else if (localStored.products && Array.isArray(localStored.products) && localStored.products.length > 0) {
+      merged.products = localStored.products;
     }
 
-    // Merge size chart config
-    if (currentSizeChartConfig) {
+    // Merge size chart config only if cloud is strictly newer than local
+    const sizeChartCloudTimeRaw = currentSizeChartConfig?.updatedAtMs || currentSizeChartConfig?.updatedAt;
+    const sizeChartCloudTime = sizeChartCloudTimeRaw ? (typeof sizeChartCloudTimeRaw === 'number' ? sizeChartCloudTimeRaw : new Date(sizeChartCloudTimeRaw).getTime() || 0) : 0;
+
+    if (sizeChartCloudTime > effectiveLocalTime && currentSizeChartConfig) {
       if (currentSizeChartConfig.sizeChartImage !== undefined) {
         merged.sizeChartImage = currentSizeChartConfig.sizeChartImage;
       }
@@ -625,6 +619,12 @@ export function subscribeToSiteSettings(
       if (currentSizeChartConfig.sizeChartDisplayMode) {
         merged.sizeChartDisplayMode = currentSizeChartConfig.sizeChartDisplayMode;
       }
+    } else if (localStored.sizeChartImage !== undefined) {
+      merged.sizeChartImage = localStored.sizeChartImage;
+      if (localStored.sizeChartRows) merged.sizeChartRows = localStored.sizeChartRows;
+      if (localStored.sizeChartTitle) merged.sizeChartTitle = localStored.sizeChartTitle;
+      if (localStored.sizeChartSubtitle) merged.sizeChartSubtitle = localStored.sizeChartSubtitle;
+      if (localStored.sizeChartDisplayMode) merged.sizeChartDisplayMode = localStored.sizeChartDisplayMode;
     }
 
     const finalSettings = sanitizeAndMergeSettings(merged);
