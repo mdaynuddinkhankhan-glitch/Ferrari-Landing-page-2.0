@@ -461,7 +461,7 @@ export function subscribeToOrders(
 
   const fetchServerOrders = async () => {
     try {
-      const res = await fetch('/api/orders');
+      const res = await fetch(`/api/orders?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
@@ -493,8 +493,33 @@ export function subscribeToOrders(
   // Initial fetch
   fetchServerOrders();
 
+  // Setup Server-Sent Events (SSE) for instant cross-device live order sync
+  let eventSource: EventSource | null = null;
+  if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+    try {
+      eventSource = new EventSource('/api/orders/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 'orders_update' && Array.isArray(parsed.data)) {
+            const serverOrders = parsed.data;
+            serverOrders.sort((a: any, b: any) => {
+              const timeA = new Date(a.createdAt || a.orderTime || 0).getTime();
+              const timeB = new Date(b.createdAt || b.orderTime || 0).getTime();
+              return timeB - timeA;
+            });
+            saveLocalStoredOrders(serverOrders);
+            onUpdate(serverOrders);
+          }
+        } catch {}
+      };
+    } catch (e) {
+      console.warn('SSE order stream notice:', e);
+    }
+  }
+
   // Periodic poll & window focus sync
-  const interval = setInterval(fetchServerOrders, 10000);
+  const interval = setInterval(fetchServerOrders, 8000);
   const handleFocus = () => fetchServerOrders();
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', handleFocus);
@@ -596,6 +621,11 @@ export function subscribeToOrders(
   return () => {
     unsubFirestore();
     clearInterval(interval);
+    if (eventSource) {
+      try {
+        eventSource.close();
+      } catch {}
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('visibilitychange', handleFocus);

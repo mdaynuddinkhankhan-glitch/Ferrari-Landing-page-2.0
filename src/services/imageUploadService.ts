@@ -16,8 +16,31 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
+ * Uploads a compressed base64 data URL to the server API for permanent centralized storage
+ */
+async function postImageToServer(dataUrl: string, folder: string): Promise<string> {
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, folder }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.url) {
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.warn('Server upload fallback to optimized WebP dataUrl:', err);
+  }
+  return dataUrl;
+}
+
+/**
  * Optimizes an image File into a high-definition, lightweight WebP image
- * that syncs instantly across all devices via Firestore.
+ * and uploads it to the central server and cloud storage.
  */
 export async function uploadImageFileToCloud(
   file: File,
@@ -29,9 +52,12 @@ export async function uploadImageFileToCloud(
   const quality = isBanner ? 0.85 : 0.82;
 
   try {
-    // Compress image locally to crisp, lightweight WebP (takes <150ms)
+    // 1. Compress image locally to crisp, lightweight WebP
     const compressedDataUrl = await compressImageFile(file, maxDim, quality);
-    return compressedDataUrl;
+
+    // 2. Upload to central server storage for permanent universal URL
+    const serverUrl = await postImageToServer(compressedDataUrl, folder);
+    return serverUrl;
   } catch (err) {
     console.error('Failed to process image file:', err);
     throw err;
@@ -56,9 +82,11 @@ export async function uploadDataUrlToCloud(
 
   try {
     const compressed = await compressDataUrl(dataUrl, maxDim, quality, true);
-    return compressed;
+    const serverUrl = await postImageToServer(compressed, folder);
+    return serverUrl;
   } catch (err) {
     console.warn('DataURL optimization note:', err);
     return dataUrl;
   }
 }
+

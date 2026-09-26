@@ -28,13 +28,26 @@ app.use('/api', (req, res, next) => {
 
 // Data file paths
 const DATA_DIR = path.resolve(__dirname, 'data');
+const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 
-// Ensure data directory exists
+// Ensure data and uploads directories exist
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Serve uploaded permanent images statically
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  maxAge: '1d',
+  immutable: false,
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
 
 // Helper functions for reading/writing persistent data
 function readJsonFile<T>(filePath: string, defaultValue: T): T {
@@ -60,17 +73,19 @@ function writeJsonFile<T>(filePath: string, data: T): void {
 }
 
 // SSE (Server-Sent Events) clients list for real-time site updates
-type SSEClient = { id: number; res: Response };
+type SSEClient = { id: number; res: Response; channel: 'settings' | 'orders' | 'all' };
 let sseClients: SSEClient[] = [];
 let nextClientId = 1;
 
 function broadcastSettings(settings: any) {
   const payload = `data: ${JSON.stringify({ type: 'settings_update', data: settings })}\n\n`;
   sseClients.forEach((client) => {
-    try {
-      client.res.write(payload);
-    } catch {
-      // client disconnected
+    if (client.channel === 'settings' || client.channel === 'all') {
+      try {
+        client.res.write(payload);
+      } catch {
+        // client disconnected
+      }
     }
   });
 }
@@ -78,25 +93,64 @@ function broadcastSettings(settings: any) {
 function broadcastOrders(orders: any) {
   const payload = `data: ${JSON.stringify({ type: 'orders_update', data: orders })}\n\n`;
   sseClients.forEach((client) => {
-    try {
-      client.res.write(payload);
-    } catch {
-      // client disconnected
+    if (client.channel === 'orders' || client.channel === 'all') {
+      try {
+        client.res.write(payload);
+      } catch {
+        // client disconnected
+      }
     }
   });
 }
 
 // -------------------------------------------------------------
-// Real-time SSE Stream Endpoint
+// Central Image Upload API Endpoint
+// -------------------------------------------------------------
+app.post('/api/upload', (req: Request, res: Response) => {
+  try {
+    const { dataUrl, folder } = req.body;
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ success: false, error: 'No image data provided' });
+    }
+
+    const matches = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ success: false, error: 'Invalid base64 image data' });
+    }
+
+    const extRaw = matches[1].toLowerCase();
+    const ext = extRaw === 'jpeg' ? 'jpg' : extRaw === 'octet-stream' ? 'webp' : extRaw;
+    const buffer = Buffer.from(matches[2], 'base64');
+    const safeFolder = folder ? String(folder).replace(/[^a-zA-Z0-9_-]/g, '') : 'general';
+    const targetFolder = path.join(UPLOADS_DIR, safeFolder);
+
+    if (!fs.existsSync(targetFolder)) {
+      fs.mkdirSync(targetFolder, { recursive: true });
+    }
+
+    const safeName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+    const filePath = path.join(targetFolder, safeName);
+    fs.writeFileSync(filePath, buffer);
+
+    const publicUrl = `/uploads/${safeFolder}/${safeName}`;
+    res.json({ success: true, url: publicUrl });
+  } catch (err: any) {
+    console.error('Server image upload error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Image upload failed' });
+  }
+});
+
+// -------------------------------------------------------------
+// Real-time SSE Stream Endpoint (Settings)
 // -------------------------------------------------------------
 app.get('/api/settings/stream', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
   const clientId = nextClientId++;
-  const client = { id: clientId, res };
+  const client: SSEClient = { id: clientId, res, channel: 'settings' };
   sseClients.push(client);
 
   // Send initial data immediately upon connection
@@ -104,6 +158,38 @@ app.get('/api/settings/stream', (req: Request, res: Response) => {
   if (currentSettings) {
     res.write(`data: ${JSON.stringify({ type: 'settings_update', data: currentSettings })}\n\n`);
   }
+
+  // Heartbeat ping every 25 seconds
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients = sseClients.filter((c) => c.id !== clientId);
+  });
+});
+
+// -------------------------------------------------------------
+// Real-time SSE Stream Endpoint (Orders)
+// -------------------------------------------------------------
+app.get('/api/orders/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const clientId = nextClientId++;
+  const client: SSEClient = { id: clientId, res, channel: 'orders' };
+  sseClients.push(client);
+
+  // Send initial data immediately upon connection
+  const currentOrders = readJsonFile<any[]>(ORDERS_FILE, []);
+  res.write(`data: ${JSON.stringify({ type: 'orders_update', data: currentOrders })}\n\n`);
 
   // Heartbeat ping every 25 seconds
   const heartbeat = setInterval(() => {

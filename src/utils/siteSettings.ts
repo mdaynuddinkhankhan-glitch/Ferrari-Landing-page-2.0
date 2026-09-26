@@ -503,10 +503,10 @@ export function subscribeToSiteSettings(
     window.addEventListener('storage', handleStorageEvent);
   }
 
-  // Fetch initial settings from server API immediately
+  // Fetch initial settings from server API immediately with cache-busting
   const fetchServerSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
+      const res = await fetch(`/api/settings?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.settings && typeof data.settings === 'object' && Object.keys(data.settings).length > 0) {
@@ -553,84 +553,55 @@ export function subscribeToSiteSettings(
   let currentSizeChartConfig: any = null;
 
   const emitMerged = () => {
-    const localStored = getStoredSettings();
-    const localLastModified = Number(localStorage.getItem('porshibari_settings_last_modified') || 0);
-    const localUpdatedAtMs = localStored.updatedAt ? new Date(localStored.updatedAt).getTime() : 0;
-    const effectiveLocalTime = Math.max(localLastModified, localUpdatedAtMs);
+    const cloudCombined: any = {
+      ...(currentSiteConfig || {}),
+    };
 
-    const cloudUpdatedAtRaw = currentSiteConfig?.updatedAtMs || currentSiteConfig?.updatedAt;
-    const cloudUpdatedAtMs = cloudUpdatedAtRaw ? (typeof cloudUpdatedAtRaw === 'number' ? cloudUpdatedAtRaw : new Date(cloudUpdatedAtRaw).getTime() || 0) : 0;
-
-    let merged: any;
-
-    if (effectiveLocalTime > 0 && effectiveLocalTime >= cloudUpdatedAtMs) {
-      // Local changes are newer: preserve local fields as source of truth
-      merged = {
-        ...(currentSiteConfig || {}),
-        ...localStored,
-      };
-    } else {
-      // Cloud changes are newer
-      merged = {
-        ...localStored,
-        ...(currentSiteConfig || {}),
-      };
+    if (
+      currentBannersConfig?.heroBanners &&
+      Array.isArray(currentBannersConfig.heroBanners) &&
+      currentBannersConfig.heroBanners.length > 0
+    ) {
+      cloudCombined.heroBanners = currentBannersConfig.heroBanners;
+      cloudCombined.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
     }
 
-    // Merge banners only if cloud is strictly newer than local
-    const bannerCloudTimeRaw = currentBannersConfig?.updatedAtMs || currentBannersConfig?.updatedAt;
-    const bannerCloudTime = bannerCloudTimeRaw ? (typeof bannerCloudTimeRaw === 'number' ? bannerCloudTimeRaw : new Date(bannerCloudTimeRaw).getTime() || 0) : 0;
-    
-    if (bannerCloudTime > effectiveLocalTime && currentBannersConfig?.heroBanners && Array.isArray(currentBannersConfig.heroBanners) && currentBannersConfig.heroBanners.length > 0) {
-      merged.heroBanners = currentBannersConfig.heroBanners;
-      merged.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
-    } else if (localStored.heroBanners && Array.isArray(localStored.heroBanners) && localStored.heroBanners.length > 0) {
-      merged.heroBanners = localStored.heroBanners;
-      merged.heroBannerImg = localStored.heroBannerImg || localStored.heroBanners[0];
+    if (
+      currentProductsConfig?.products &&
+      Array.isArray(currentProductsConfig.products) &&
+      currentProductsConfig.products.length > 0
+    ) {
+      cloudCombined.products = currentProductsConfig.products;
     }
 
-    // Merge products only if cloud is strictly newer than local
-    const productCloudTimeRaw = currentProductsConfig?.updatedAtMs || currentProductsConfig?.updatedAt;
-    const productCloudTime = productCloudTimeRaw ? (typeof productCloudTimeRaw === 'number' ? productCloudTimeRaw : new Date(productCloudTimeRaw).getTime() || 0) : 0;
-
-    if (productCloudTime > effectiveLocalTime && currentProductsConfig?.products && Array.isArray(currentProductsConfig.products) && currentProductsConfig.products.length > 0) {
-      merged.products = currentProductsConfig.products;
-    } else if (localStored.products && Array.isArray(localStored.products) && localStored.products.length > 0) {
-      merged.products = localStored.products;
-    }
-
-    // Merge size chart config only if cloud is strictly newer than local
-    const sizeChartCloudTimeRaw = currentSizeChartConfig?.updatedAtMs || currentSizeChartConfig?.updatedAt;
-    const sizeChartCloudTime = sizeChartCloudTimeRaw ? (typeof sizeChartCloudTimeRaw === 'number' ? sizeChartCloudTimeRaw : new Date(sizeChartCloudTimeRaw).getTime() || 0) : 0;
-
-    if (sizeChartCloudTime > effectiveLocalTime && currentSizeChartConfig) {
+    if (currentSizeChartConfig) {
       if (currentSizeChartConfig.sizeChartImage !== undefined) {
-        merged.sizeChartImage = currentSizeChartConfig.sizeChartImage;
+        cloudCombined.sizeChartImage = currentSizeChartConfig.sizeChartImage;
       }
       if (currentSizeChartConfig.sizeChartRows && Array.isArray(currentSizeChartConfig.sizeChartRows)) {
-        merged.sizeChartRows = currentSizeChartConfig.sizeChartRows;
+        cloudCombined.sizeChartRows = currentSizeChartConfig.sizeChartRows;
       }
       if (currentSizeChartConfig.sizeChartTitle) {
-        merged.sizeChartTitle = currentSizeChartConfig.sizeChartTitle;
+        cloudCombined.sizeChartTitle = currentSizeChartConfig.sizeChartTitle;
       }
       if (currentSizeChartConfig.sizeChartSubtitle) {
-        merged.sizeChartSubtitle = currentSizeChartConfig.sizeChartSubtitle;
+        cloudCombined.sizeChartSubtitle = currentSizeChartConfig.sizeChartSubtitle;
       }
       if (currentSizeChartConfig.sizeChartDisplayMode) {
-        merged.sizeChartDisplayMode = currentSizeChartConfig.sizeChartDisplayMode;
+        cloudCombined.sizeChartDisplayMode = currentSizeChartConfig.sizeChartDisplayMode;
       }
-    } else if (localStored.sizeChartImage !== undefined) {
-      merged.sizeChartImage = localStored.sizeChartImage;
-      if (localStored.sizeChartRows) merged.sizeChartRows = localStored.sizeChartRows;
-      if (localStored.sizeChartTitle) merged.sizeChartTitle = localStored.sizeChartTitle;
-      if (localStored.sizeChartSubtitle) merged.sizeChartSubtitle = localStored.sizeChartSubtitle;
-      if (localStored.sizeChartDisplayMode) merged.sizeChartDisplayMode = localStored.sizeChartDisplayMode;
     }
 
-    const finalSettings = sanitizeAndMergeSettings(merged);
+    const localStored = getStoredSettings();
+    const finalSettings = sanitizeAndMergeSettings({
+      ...localStored,
+      ...cloudCombined,
+    });
+
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(finalSettings));
     } catch {}
+
     callback(finalSettings);
   };
 

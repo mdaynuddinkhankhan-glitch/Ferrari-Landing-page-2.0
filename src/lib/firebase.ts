@@ -4,18 +4,18 @@ import { initializeFirestore, doc, getDocFromServer, setLogLevel } from 'firebas
 import rawConfig from '../../firebase-applet-config.json';
 
 // Permanent production Firebase configuration for Porshibari Fashion
-// This ensures that even if files are copied, moved, or deployed to Vercel/Netlify/cPanel/VPS/GitHub,
-// the app will never lose its connection to Firestore and all data/orders/settings remain 100% intact.
+// Connected to user project: webm-5bf61
 export const firebaseConfig = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || rawConfig?.projectId || 'magnetic-quality-s6rpq',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || rawConfig?.appId || '1:630433280658:web:85bc090393f9ba29a4ac4b',
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || rawConfig?.apiKey || 'AIzaSyDNsNZC3fNYS0YddzKUe6DO20EXgkpzRx8',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || rawConfig?.authDomain || 'magnetic-quality-s6rpq.firebaseapp.com',
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || rawConfig?.firestoreDatabaseId || 'ai-studio-porshibarifashio-08700336-3eb3-4b65-9c40-8498da788e35',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || rawConfig?.storageBucket || 'magnetic-quality-s6rpq.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawConfig?.messagingSenderId || '630433280658',
-  measurementId: rawConfig?.measurementId || '',
-  oAuthClientId: rawConfig?.oAuthClientId || '630433280658-dt8lt5t6093nhl2kbe3l89u171j3area.apps.googleusercontent.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || rawConfig?.projectId || 'webm-5bf61',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || rawConfig?.appId || '1:391588890108:web:951a52e4eea725584e1e79',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || rawConfig?.apiKey || 'AIzaSyA0jpgQdHnrWUPuv5AV0XA7BFoBpvKk-_o',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || rawConfig?.authDomain || 'webm-5bf61.firebaseapp.com',
+  databaseURL: rawConfig?.databaseURL || 'https://webm-5bf61-default-rtdb.firebaseio.com',
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || rawConfig?.firestoreDatabaseId || '(default)',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || rawConfig?.storageBucket || 'webm-5bf61.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawConfig?.messagingSenderId || '391588890108',
+  measurementId: rawConfig?.measurementId || 'G-6QY2XY5WN5',
+  oAuthClientId: rawConfig?.oAuthClientId || '',
 };
 
 export const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
@@ -83,14 +83,9 @@ export function isFirestoreQuotaError(error: unknown): boolean {
   );
 }
 
-/* CRITICAL: The app will break without passing firestoreDatabaseId */
-export const db = initializeFirestore(
-  app,
-  {
-    ...(isBrowser ? { experimentalForceLongPolling: true } : {}),
-  },
-  firebaseConfig.firestoreDatabaseId
-);
+export const db = (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)')
+  ? initializeFirestore(app, { ...(isBrowser ? { experimentalForceLongPolling: true } : {}) }, firebaseConfig.firestoreDatabaseId)
+  : initializeFirestore(app, { ...(isBrowser ? { experimentalForceLongPolling: true } : {}) });
 
 export const auth = getAuth(app);
 export const storage = null;
