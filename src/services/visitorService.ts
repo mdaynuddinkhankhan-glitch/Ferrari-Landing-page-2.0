@@ -5,6 +5,7 @@ import {
   isFirestoreQuotaError,
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
+import { getApiUrl } from './apiConfig';
 
 const SETTINGS_COLLECTION = 'settings';
 const VISITOR_DOC_ID = 'visitor_stats';
@@ -149,7 +150,7 @@ export async function recordWebsiteVisit(): Promise<VisitorStats> {
 
   // Sync with Central Server API
   try {
-    const res = await fetch('/api/visitors', {
+    const res = await fetch(getApiUrl('/api/visitors'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -203,7 +204,7 @@ export function subscribeVisitorStats(callback: (stats: VisitorStats) => void): 
   // Fetch from Central Server API
   const fetchServerStats = async () => {
     try {
-      const res = await fetch(`/api/visitors?_t=${Date.now()}`);
+      const res = await fetch(getApiUrl(`/api/visitors?_t=${Date.now()}`));
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -270,7 +271,7 @@ export async function updateVisitorCount(newTotal: number): Promise<void> {
   saveLocalVisitorStats(updated);
 
   try {
-    await fetch('/api/visitors', {
+    await fetch(getApiUrl('/api/visitors'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

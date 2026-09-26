@@ -32,23 +32,20 @@ try {
 // Using experimentalForceLongPolling or experimentalAutoDetectLongPolling ensures immediate reliable connectivity.
 const isBrowser = typeof window !== 'undefined';
 
-// Previous Firebase project disconnected as requested.
-// The website is now powered 100% by the Central Server Database with zero third-party limits or permission errors.
-export const IS_PREVIOUS_FIREBASE_DISCONNECTED = true;
+let quotaExhaustedUntil = 0;
 
 /**
- * Indicates whether Firestore operations should be bypassed.
- * Returns true because the previous Firebase project has been disconnected in favor of the Central Server.
+ * Indicates whether Firestore operations should be temporarily bypassed due to quota error.
  */
 export function isFirestoreQuotaExhausted(): boolean {
-  return true;
+  return quotaExhaustedUntil > Date.now();
 }
 
 /**
- * Marks Firestore quota as exhausted.
+ * Marks Firestore quota as exhausted for a temporary period.
  */
-export function markFirestoreQuotaExhausted(_durationMs = 1000 * 60 * 60 * 24): void {
-  // Disconnected
+export function markFirestoreQuotaExhausted(durationMs = 1000 * 60 * 30): void {
+  quotaExhaustedUntil = Date.now() + durationMs;
 }
 
 /**

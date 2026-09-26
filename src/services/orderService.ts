@@ -18,6 +18,7 @@ import {
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
 import { OrderConfirmation, OrderedProductItem } from '../types';
+import { getApiUrl } from './apiConfig';
 
 const ORDERS_COLLECTION = 'orders';
 const SETTINGS_COLLECTION = 'settings';
@@ -357,7 +358,7 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<{ 
 
   // 2. Central Server API persistence (guarantees cross-device delivery to all admin phones)
   try {
-    await fetch('/api/orders', {
+    await fetch(getApiUrl('/api/orders'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -423,7 +424,7 @@ export async function updateOrderInFirestore(
 
   // Update central server API
   try {
-    fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+    fetch(getApiUrl(`/api/orders/${encodeURIComponent(orderId)}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -493,7 +494,7 @@ export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
 
   // 5. Delete from central server API
   try {
-    await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+    await fetch(getApiUrl(`/api/orders/${encodeURIComponent(orderId)}`), {
       method: 'DELETE',
     });
   } catch (err) {
@@ -534,7 +535,7 @@ export function subscribeToOrders(
 
   const fetchServerOrders = async () => {
     try {
-      const res = await fetch(`/api/orders?t=${Date.now()}`);
+      const res = await fetch(getApiUrl(`/api/orders?t=${Date.now()}`));
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
@@ -564,7 +565,7 @@ export function subscribeToOrders(
   let eventSource: EventSource | null = null;
   if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
     try {
-      eventSource = new EventSource('/api/orders/stream');
+      eventSource = new EventSource(getApiUrl('/api/orders/stream'));
       eventSource.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);

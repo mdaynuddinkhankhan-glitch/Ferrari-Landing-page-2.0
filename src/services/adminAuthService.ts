@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db, isFirestoreQuotaExhausted, isFirestoreQuotaError, markFirestoreQuotaExhausted } from '../lib/firebase';
+import { getApiUrl } from './apiConfig';
 
 const ADMIN_AUTH_DOC = 'admin_auth';
 const ADMIN_PASSWORD_KEY = 'porshibari_admin_password';
@@ -58,7 +59,7 @@ export function subscribeToAdminPassword(onPasswordChange: (password: string) =>
   // Fetch from central server API
   const fetchServerPassword = async () => {
     try {
-      const res = await fetch(`/api/admin-auth?_t=${Date.now()}`);
+      const res = await fetch(getApiUrl(`/api/admin-auth?_t=${Date.now()}`));
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.password) {
@@ -117,7 +118,7 @@ export async function updateAdminPassword(newPassword: string): Promise<{ succes
 
   // 2. Persist to Central Server API
   try {
-    await fetch('/api/admin-auth', {
+    await fetch(getApiUrl('/api/admin-auth'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: trimmed }),

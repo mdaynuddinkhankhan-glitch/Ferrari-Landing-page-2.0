@@ -14,6 +14,7 @@ import {
   markFirestoreQuotaExhausted,
 } from '../lib/firebase';
 import { compressDataUrl } from './imageCompressor';
+import { getApiUrl } from '../services/apiConfig';
 
 export interface SizeChartRowItem {
   id?: string;
@@ -368,7 +369,7 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     // 2. PRIMARY: Save to Central Server API & AWAIT response!
     let serverSaveSuccess = false;
     try {
-      const res = await fetch('/api/settings', {
+      const res = await fetch(getApiUrl('/api/settings'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -556,7 +557,7 @@ export function subscribeToSiteSettings(
   // 1. Fetch fresh settings from central server API immediately with cache-busting
   const fetchServerSettings = async () => {
     try {
-      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
+      const res = await fetch(getApiUrl(`/api/settings?_t=${Date.now()}`), {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
@@ -584,7 +585,7 @@ export function subscribeToSiteSettings(
   let eventSource: EventSource | null = null;
   if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
     try {
-      eventSource = new EventSource('/api/settings/stream');
+      eventSource = new EventSource(getApiUrl('/api/settings/stream'));
       eventSource.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);
