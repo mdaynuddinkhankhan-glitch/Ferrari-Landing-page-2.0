@@ -129,7 +129,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const settingsAutoSaveRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (initialSettings && !isEditingSettingsRef.current) {
+    if (initialSettings) {
+      const localLastModified = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
+      const incomingModified = (initialSettings as any).serverUpdatedAtMs || (initialSettings.updatedAt ? new Date(initialSettings.updatedAt).getTime() : 0);
+
+      // Don't overwrite local settings if currently editing or if local state is newer
+      if (isEditingSettingsRef.current || (localLastModified > incomingModified && Date.now() - localLastModified < 8000)) {
+        return;
+      }
       setSettings(initialSettings);
     }
   }, [initialSettings]);

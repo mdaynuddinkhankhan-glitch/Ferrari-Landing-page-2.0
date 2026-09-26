@@ -188,12 +188,14 @@ export function sanitizeAndMergeSettings(parsed: any): SiteSettings {
 
   const sanitizedProducts = rawProducts.map((p: any, idx: number) => {
     const defaultProd =
-      DEFAULT_SITE_SETTINGS.products[idx] || DEFAULT_SITE_SETTINGS.products[0];
+      DEFAULT_SITE_SETTINGS.products.find((dp) => dp.id === p?.id) ||
+      DEFAULT_SITE_SETTINGS.products[idx] ||
+      DEFAULT_SITE_SETTINGS.products[0];
     let bName = p?.banglaName || defaultProd.banglaName;
     if (typeof bName === 'string' && bName.includes('কালা')) {
       bName = 'Black';
     }
-    const isBrokenImg = !p?.image || (typeof p.image === 'string' && p.image.startsWith('/images/')) || (typeof p.image === 'string' && p.image.trim() === '');
+    const isBrokenImg = !p?.image || (typeof p.image === 'string' && p.image.trim() === '');
     const validImg = isBrokenImg ? defaultProd.image : p.image;
 
     return {
@@ -378,8 +380,15 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.settings) {
           serverSaveSuccess = true;
+          const serverMs = data.settings.serverUpdatedAtMs || nowMs;
+          localStorage.setItem('porshibari_settings_last_modified', String(serverMs));
+          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data.settings));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: data.settings }));
+          }
+          return { success: true };
         }
       }
     } catch (serverErr) {
@@ -492,11 +501,24 @@ export function subscribeToSiteSettings(
 
   const applyNewSettings = (incoming: any) => {
     if (!incoming || typeof incoming !== 'object') return;
+
+    // Check timestamps: Never overwrite newer local edits with older incoming data!
+    try {
+      const localMs = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
+      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : 0);
+      const now = Date.now();
+
+      // If local was modified very recently and local timestamp is newer, protect local state
+      if (localMs > incomingMs && now - localMs < 8000) {
+        return;
+      }
+    } catch {}
+
     const merged = sanitizeAndMergeSettings(incoming);
 
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
-      const incomingMs = incoming.updatedAtMs || incoming.serverUpdatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : Date.now());
+      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : Date.now());
       localStorage.setItem('porshibari_settings_last_modified', String(incomingMs));
     } catch {}
 
