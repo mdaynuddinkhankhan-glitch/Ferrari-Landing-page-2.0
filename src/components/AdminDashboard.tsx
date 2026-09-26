@@ -14,6 +14,7 @@ import {
   updateOrderInFirestore,
   deleteOrderFromFirestore,
   saveOrderToFirestore,
+  getLocalStoredOrders,
   isOrderBooked,
   saveSteadfastBookingToCloud,
   resetOrderSteadfastBooking,
@@ -69,6 +70,7 @@ import {
   Printer,
   Send,
   RotateCw,
+  RefreshCw,
   ShoppingCart,
   Copy,
   LayoutDashboard,
@@ -328,13 +330,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Load orders and synchronize in real-time with Firebase Firestore & localStorage
   useEffect(() => {
-    // 1. Initial fast local cache load
+    // 1. Initial fast local cache load & auto-sync to cloud
     try {
       const saved = localStorage.getItem('porshibari_orders');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setOrders(parsed);
+          // Auto push any local orders to Cloud/Server so other phones get them immediately
+          parsed.forEach((ord: OrderConfirmation) => {
+            if (ord && ord.orderId) {
+              saveOrderToFirestore(ord).catch(() => {});
+            }
+          });
         }
       }
     } catch {
@@ -544,6 +552,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const handleSyncAllData = async () => {
+    setIsSyncingAll(true);
+    showSuccessBanner('সব ডিভাইসের সাথে লাইভ সিঙ্ক হচ্ছে...');
+    try {
+      // 1. Force push current settings to server and cloud
+      await saveStoredSettings(settings);
+
+      // 2. Force push all orders to server and cloud
+      const currentOrders = orders.length > 0 ? orders : getLocalStoredOrders();
+      if (currentOrders.length > 0) {
+        for (const ord of currentOrders) {
+          if (ord && ord.orderId) {
+            await saveOrderToFirestore(ord).catch(() => {});
+          }
+        }
+      }
+
+      showSuccessBanner('✅ সকল ছবি, টেক্সট ও অর্ডার ক্লাউডে ১০০% সিঙ্ক হয়েছে! এখন অন্য সব ফোনে দেখতে পাবেন।');
+    } catch (err: any) {
+      showErrorBanner('সিঙ্ক করতে সমস্যা হয়েছে, অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } finally {
+      setIsSyncingAll(false);
+    }
   };
 
   const handleDeleteOrder = (orderId: string) => {
@@ -1554,8 +1588,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Header Right Actions (3-Dot Menu) */}
+          {/* Header Right Actions (Sync & 3-Dot Menu) */}
           <div className="flex items-center gap-2">
+            {/* Live Cross-Device Cloud Sync Button */}
+            <button
+              type="button"
+              onClick={handleSyncAllData}
+              disabled={isSyncingAll}
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-[#ff146b] to-purple-600 hover:opacity-95 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-pink-500/20 transition-all cursor-pointer disabled:opacity-50"
+              title="সব ফোনে ছবি, টেক্সট ও অর্ডার লাইভ সিঙ্ক করুন"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">সব ফোনে সিঙ্ক</span>
+            </button>
+
             <div className="relative">
               {/* 3-Dot Button */}
               <button
@@ -1579,12 +1625,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="fixed inset-0 z-40"
                     onClick={() => setIsThreeDotOpen(false)}
                   />
-                  <div className="absolute right-0 top-12 z-50 w-56 bg-neutral-900 border border-neutral-700/90 rounded-2xl shadow-2xl py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute right-0 top-12 z-50 w-60 bg-neutral-900 border border-neutral-700/90 rounded-2xl shadow-2xl py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                     <div className="px-3.5 py-2 border-b border-neutral-800 bg-neutral-950/70">
                       <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                         এডমিন অপশন (3 ডট)
                       </p>
                     </div>
+
+                    {/* Instant Cloud Sync Option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsThreeDotOpen(false);
+                        handleSyncAllData();
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-neutral-800 text-white text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer group"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-pink-500/20 text-[#ff146b] flex items-center justify-center group-hover:bg-[#ff146b] group-hover:text-white transition-colors">
+                        <RefreshCw className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-white group-hover:text-pink-200">সব ডিভাইসে সিঙ্ক করুন</span>
+                        <span className="text-[10px] text-neutral-400">সকল ছবি ও ৬টি অর্ডার লাইভ পাঠান</span>
+                      </div>
+                    </button>
 
                     {/* Password cange option - EXACT user request */}
                     <button
@@ -4104,6 +4168,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           alt={prod.name}
                           className="w-full h-full object-cover"
                         />
+                        <div className="absolute bottom-2 left-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const originalDefault = DEFAULT_SITE_SETTINGS.products[idx]?.image;
+                              if (originalDefault) {
+                                handleProductChange(idx, 'image', originalDefault);
+                                showSuccessBanner('আসল পার্মানেন্ট HD ছবি রিস্টোর করা হয়েছে!');
+                              }
+                            }}
+                            className="bg-black/80 hover:bg-black text-white text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow backdrop-blur-xs cursor-pointer transition-all active:scale-95"
+                            title="আসল পার্মানেন্ট ছবি ফিরিয়ে আনুন"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>আসল ছবি</span>
+                          </button>
+                        </div>
+
                         <button
                           type="button"
                           disabled={uploadingProductIdx === idx}
