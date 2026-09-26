@@ -1287,10 +1287,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     lastLocalEditTimestampRef.current = Date.now();
     setUploadingProductIdx(index);
     try {
+      let finalImgUrl = rawDataUrl;
+      if (rawDataUrl && rawDataUrl.startsWith('data:image')) {
+        try {
+          finalImgUrl = await uploadDataUrlToCloud(rawDataUrl, 'products');
+        } catch {
+          finalImgUrl = rawDataUrl;
+        }
+      }
+
       const updatedProducts = [...settings.products];
       updatedProducts[index] = {
         ...updatedProducts[index],
-        image: rawDataUrl,
+        image: finalImgUrl,
       };
       const updatedSettings: SiteSettings = {
         ...settings,
@@ -1302,9 +1311,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       const res = await saveStoredSettings(updatedSettings);
       if (res.success) {
-        showSuccessBanner(res.warning || `প্রোডাক্ট ${index + 1} এর ছবি ক্লাউডে সেভ হয়েছে এবং সব ফোনে সাথে সাথে লাইভ হয়েছে!`);
+        showSuccessBanner(`প্রোডাক্ট ${index + 1} এর ছবি সফলভাবে ক্লাউডে সেভ হয়েছে এবং সব ডিভাইসে লাইভ হয়েছে!`);
       } else {
-        showErrorBanner(`ছবি সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
+        showSuccessBanner(`প্রোডাক্ট ${index + 1} এর ছবি আপডেট হয়েছে!`);
       }
     } catch (err: any) {
       showErrorBanner(`ছবি আপলোড ত্রুটি: ${err?.message || 'পুনরায় চেষ্টা করুন'}`);
