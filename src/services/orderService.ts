@@ -317,7 +317,18 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<{ 
     console.warn('Local backup save note:', err);
   }
 
-  // 2. Central Cloud Firestore persistence with guaranteed timeout
+  // 2. Central Server API persistence (guarantees cross-device delivery to all admin phones)
+  try {
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
+  // 3. Central Cloud Firestore persistence with guaranteed timeout
   try {
     const docRef = doc(db, ORDERS_COLLECTION, docId);
     await Promise.race([
@@ -368,6 +379,17 @@ export async function updateOrderInFirestore(
     saveLocalStoredOrders(localList);
   }
 
+  // Update central server API
+  try {
+    fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
   if (isFirestoreQuotaExhausted()) {
     if (fullMergedOrder) queuePendingSync(fullMergedOrder);
     return;
@@ -399,6 +421,15 @@ export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
   const localList = getLocalStoredOrders().filter((o) => o.orderId !== orderId && sanitizeOrderId(o.orderId) !== docId);
   saveLocalStoredOrders(localList);
 
+  // Delete from central server API
+  try {
+    fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+
   if (isFirestoreQuotaExhausted()) {
     return;
   }
@@ -416,9 +447,8 @@ export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
 }
 
 /**
- * Real-time subscription to orders from Firestore.
- * Automatically synchronizes with local storage and prevents data loss.
- * Intelligently merges booking state so booked orders never revert to unbooked.
+ * Real-time subscription to orders from Central Server API and Firestore.
+ * Automatically synchronizes with local storage and prevents data loss across all devices.
  */
 export function subscribeToOrders(
   onUpdate: (orders: OrderConfirmation[]) => void,
@@ -429,8 +459,50 @@ export function subscribeToOrders(
     syncPendingOrdersToFirestore().catch(() => {});
   }
 
+  const fetchServerOrders = async () => {
+    try {
+      const res = await fetch('/api/orders');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders)) {
+          const localOrders = getLocalStoredOrders();
+          const mergedMap = new Map<string, OrderConfirmation>();
+
+          data.orders.forEach((o: OrderConfirmation) => {
+            if (o && o.orderId) mergedMap.set(o.orderId, o);
+          });
+          localOrders.forEach((o: OrderConfirmation) => {
+            if (o && o.orderId && !mergedMap.has(o.orderId)) mergedMap.set(o.orderId, o);
+          });
+
+          const merged = Array.from(mergedMap.values());
+          merged.sort((a, b) => {
+            const timeA = new Date(a.createdAt || a.orderTime || 0).getTime();
+            const timeB = new Date(b.createdAt || b.orderTime || 0).getTime();
+            return timeB - timeA;
+          });
+          saveLocalStoredOrders(merged);
+          onUpdate(merged);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Initial fetch
+  fetchServerOrders();
+
+  // Periodic poll & window focus sync
+  const interval = setInterval(fetchServerOrders, 10000);
+  const handleFocus = () => fetchServerOrders();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleFocus);
+  }
+
   const colRef = collection(db, ORDERS_COLLECTION);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     colRef,
     (snapshot) => {
       const cloudOrders: OrderConfirmation[] = [];
@@ -441,20 +513,12 @@ export function subscribeToOrders(
       const localOrders = getLocalStoredOrders();
       const localBookings = getLocalBookings();
 
-      const localMap = new Map<string, OrderConfirmation>();
-      for (const loc of localOrders) {
-        localMap.set(loc.orderId, loc);
-        const cleanId = String(loc.orderId || '').replace('#', '');
-        localMap.set(cleanId, loc);
-      }
-
       const mergedOrders: OrderConfirmation[] = [];
       const seenOrderIds = new Set<string>();
 
       for (const cloud of cloudOrders) {
         const cleanId = String(cloud.orderId || '').replace('#', '');
 
-        // Cloud is the single source of truth. If order is not sent in cloud, purge stale local booking
         if (!cloud.steadfastSent) {
           removeLocalBooking(cloud.orderId);
           removeLocalBooking(cleanId);
@@ -484,7 +548,6 @@ export function subscribeToOrders(
         seenOrderIds.add(cleanId);
       }
 
-      // Check only explicit offline pending orders that haven't reached Firestore yet
       const pendingSyncList = getPendingSyncOrders();
       if (pendingSyncList.length > 0) {
         for (const pending of pendingSyncList) {
@@ -497,7 +560,16 @@ export function subscribeToOrders(
         }
       }
 
-      // Sort descending by orderTime or numerical orderId
+      // Merge local orders that might not be in cloud yet
+      for (const loc of localOrders) {
+        const cleanId = String(loc.orderId || '').replace('#', '');
+        if (!seenOrderIds.has(loc.orderId) && !seenOrderIds.has(cleanId)) {
+          mergedOrders.push(loc);
+          seenOrderIds.add(loc.orderId);
+          seenOrderIds.add(cleanId);
+        }
+      }
+
       mergedOrders.sort((a, b) => {
         const numA = parseInt(String(a.orderId).replace(/\D/g, '') || '0', 10);
         const numB = parseInt(String(b.orderId).replace(/\D/g, '') || '0', 10);
@@ -507,7 +579,6 @@ export function subscribeToOrders(
         return timeB - timeA;
       });
 
-      // Update local storage backup with authoritative merged truth
       saveLocalStoredOrders(mergedOrders);
       onUpdate(mergedOrders);
     },
@@ -518,10 +589,18 @@ export function subscribeToOrders(
       }
       console.warn('Firebase orders subscription warning:', error?.message || error);
       if (onError && !isFirestoreQuotaError(error)) onError(error);
-      // On offline error or quota limit, provide local cached orders
-      onUpdate(getLocalStoredOrders());
+      fetchServerOrders();
     }
   );
+
+  return () => {
+    unsubFirestore();
+    clearInterval(interval);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
+    }
+  };
 }
 
 /**

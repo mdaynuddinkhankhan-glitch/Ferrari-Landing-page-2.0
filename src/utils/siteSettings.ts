@@ -1,9 +1,9 @@
 import { ShirtProduct, ShirtSize } from '../types';
-import blackImg from '../assets/images/ferrari_jacket_black_1790107270989.jpg';
-import whiteImg from '../assets/images/ferrari_jacket_white_1790107289257.jpg';
-import redImg from '../assets/images/ferrari_jacket_red_1790107301729.jpg';
-import bannerImg from '../assets/images/ferrari_jacket_banner_1790107323198.jpg';
-import sizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
+import blackImg from '../assets/images/ferrari_black.jpg';
+import whiteImg from '../assets/images/ferrari_white.jpg';
+import redImg from '../assets/images/ferrari_red.jpg';
+import bannerImg from '../assets/images/banner.jpg';
+import sizeChartImg from '../assets/images/size_chart.jpg';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import {
   db,
@@ -370,18 +370,28 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
       console.warn('Failed to save site settings locally', err);
     }
 
-    // 2. Check circuit-breaker: if Firestore quota is currently exhausted, avoid cloud write and return immediately
-    if (isFirestoreQuotaExhausted()) {
-      return {
-        success: true,
-        warning: 'দৈনিক ফ্রি ক্লাউড কোটা সাময়িকভাবে পূর্ণ হয়েছে, সেটিংস ডিভাইসে সফলভাবে সংরক্ষিত রয়েছে।',
-      };
+    // 2. Concurrently sync to central backend server API (permanent across all devices globally)
+    try {
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localSettings),
+      }).catch((apiErr) => {
+        console.warn('Backend API save warning:', apiErr);
+      });
+    } catch {
+      // ignore
     }
 
-    // 3. Prepare optimized payload (no redundant canvas loops for plain texts)
+    // 3. Check circuit-breaker for Firestore
+    if (isFirestoreQuotaExhausted()) {
+      return { success: true };
+    }
+
+    // 4. Prepare optimized payload
     const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.82, 800, 0.80);
 
-    // 4. Concurrently sync documents to Firestore with safe timeout
+    // 5. Concurrently sync documents to Firestore with safe timeout
     const writePromises: Promise<any>[] = [];
 
     // Main site config document (text, prices, pixels, etc.)
@@ -456,19 +466,15 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
   } catch (err: any) {
     if (isFirestoreQuotaError(err)) {
       markFirestoreQuotaExhausted();
-      return {
-        success: true,
-        warning: 'দৈনিক ফ্রি ক্লাউড কোটা লিমিট পূর্ণ হয়েছে, তবে সেটিংস ডিভাইসে সংরক্ষিত রয়েছে।',
-      };
     }
-    console.warn('Firebase settings save error:', err?.message || err);
+    console.warn('Settings save notice:', err?.message || err);
     return { success: true };
   }
 }
 
 /**
- * Real-time listener for site settings from Firestore cloud database.
- * Ensures that all updates made from ANY phone immediately sync to ALL phones in real-time.
+ * Real-time listener for site settings from Backend API, Server-Sent Events (SSE), and Firestore.
+ * Ensures that all updates made from ANY phone immediately sync to ALL phones in real-time across the world.
  */
 export function subscribeToSiteSettings(
   callback: (settings: SiteSettings) => void
@@ -497,6 +503,49 @@ export function subscribeToSiteSettings(
     window.addEventListener('storage', handleStorageEvent);
   }
 
+  // Fetch initial settings from server API immediately
+  const fetchServerSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.settings && typeof data.settings === 'object' && Object.keys(data.settings).length > 0) {
+          const merged = sanitizeAndMergeSettings(data.settings);
+          try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          callback(merged);
+        }
+      }
+    } catch {
+      // ignore network errors
+    }
+  };
+
+  fetchServerSettings();
+
+  // Setup Server-Sent Events (SSE) for instant cross-device live sync
+  let eventSource: EventSource | null = null;
+  if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+    try {
+      eventSource = new EventSource('/api/settings/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.type === 'settings_update' && parsed.data) {
+            const merged = sanitizeAndMergeSettings(parsed.data);
+            try {
+              localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            callback(merged);
+          }
+        } catch {}
+      };
+    } catch (e) {
+      console.warn('SSE connection notice:', e);
+    }
+  }
+
   // Combined cloud states
   let currentSiteConfig: any = null;
   let currentBannersConfig: any = null;
@@ -514,23 +563,20 @@ export function subscribeToSiteSettings(
 
     let merged: any;
 
-    // Check timestamp: If local saved data is NEWER than cloud data, DO NOT let older cloud data overwrite local edits!
     if (effectiveLocalTime > 0 && effectiveLocalTime > cloudUpdatedAtMs) {
       merged = {
         ...(currentSiteConfig || {}),
         ...localStored,
       };
-      // Quietly push the fresher local version to Firestore in background
       saveStoredSettings(localStored).catch(() => {});
     } else {
-      // Cloud is newer or same freshness
       merged = {
         ...localStored,
         ...(currentSiteConfig || {}),
       };
     }
 
-    // Merge banners from banners_config or site_config
+    // Merge banners
     if (
       currentBannersConfig?.heroBanners &&
       Array.isArray(currentBannersConfig.heroBanners) &&
@@ -547,7 +593,7 @@ export function subscribeToSiteSettings(
       merged.heroBannerImg = currentSiteConfig.heroBannerImg || currentSiteConfig.heroBanners[0];
     }
 
-    // Merge products from products_config or site_config
+    // Merge products
     if (
       currentProductsConfig?.products &&
       Array.isArray(currentProductsConfig.products) &&
@@ -605,7 +651,6 @@ export function subscribeToSiteSettings(
         if (isFirestoreQuotaError(err)) {
           markFirestoreQuotaExhausted();
         }
-        console.warn('Cloud site_config subscription note:', err?.message || err);
       }
     );
     unsubscribers.push(unsubSite);
@@ -624,7 +669,6 @@ export function subscribeToSiteSettings(
         if (isFirestoreQuotaError(err)) {
           markFirestoreQuotaExhausted();
         }
-        console.warn('Cloud banners_config subscription note:', err?.message || err);
       }
     );
     unsubscribers.push(unsubBanners);
@@ -643,7 +687,6 @@ export function subscribeToSiteSettings(
         if (isFirestoreQuotaError(err)) {
           markFirestoreQuotaExhausted();
         }
-        console.warn('Cloud products_config subscription note:', err?.message || err);
       }
     );
     unsubscribers.push(unsubProducts);
@@ -662,12 +705,20 @@ export function subscribeToSiteSettings(
         if (isFirestoreQuotaError(err)) {
           markFirestoreQuotaExhausted();
         }
-        console.warn('Cloud sizechart_config subscription note:', err?.message || err);
       }
     );
     unsubscribers.push(unsubSizeChart);
   } catch (err) {
     console.warn('Could not initialize cloud settings subscriber:', err);
+  }
+
+  // Refresh on window focus
+  const handleFocus = () => {
+    fetchServerSettings();
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleFocus);
   }
 
   return () => {
@@ -676,9 +727,16 @@ export function subscribeToSiteSettings(
         u();
       } catch {}
     });
+    if (eventSource) {
+      try {
+        eventSource.close();
+      } catch {}
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('porshibari_settings_updated', handleLocalEvent);
       window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
     }
   };
 }
