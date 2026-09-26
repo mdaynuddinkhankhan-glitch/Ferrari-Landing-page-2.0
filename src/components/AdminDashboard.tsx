@@ -590,23 +590,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleDeleteOrder = (orderId: string) => {
+    const cleanId = String(orderId || '').replace('#', '');
     setConfirmModal({
       message: `আপনি কি অর্ডার ${orderId} মুছে ফেলতে চান?`,
-      onConfirm: () => {
-        const updated = orders.filter((o) => o.orderId !== orderId);
+      onConfirm: async () => {
+        const updated = orders.filter(
+          (o) => o.orderId !== orderId && String(o.orderId || '').replace('#', '') !== cleanId
+        );
         setOrders(updated);
         try {
           localStorage.setItem('porshibari_orders', JSON.stringify(updated));
         } catch {
           // ignore
         }
-        deleteOrderFromFirestore(orderId).catch(console.warn);
-        if (viewingOrder?.orderId === orderId) {
+        await deleteOrderFromFirestore(orderId);
+        if (viewingOrder?.orderId === orderId || String(viewingOrder?.orderId || '').replace('#', '') === cleanId) {
           setViewingOrder(null);
           setEditOrderForm(null);
           setIsEditingOrder(false);
         }
-        showSuccessBanner(`অর্ডার ${orderId} মুছে ফেলা হয়েছে!`);
+        showSuccessBanner(`অর্ডার ${orderId} সফলভাবে মুছে ফেলা হয়েছে!`);
         setConfirmModal(null);
       },
     });
@@ -791,20 +794,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (selectedOrderIds.length === 0) return;
     setConfirmModal({
       message: `আপনি কি নির্বাচিত ${selectedOrderIds.length}টি অর্ডার মুছে ফেলতে চান?`,
-      onConfirm: () => {
+      onConfirm: async () => {
         const idsToDelete = [...selectedOrderIds];
-        const updated = orders.filter((o) => !selectedOrderIds.includes(o.orderId));
+        const cleanIdsToDelete = idsToDelete.map((id) => String(id || '').replace('#', ''));
+        const updated = orders.filter(
+          (o) =>
+            !idsToDelete.includes(o.orderId) &&
+            !cleanIdsToDelete.includes(String(o.orderId || '').replace('#', ''))
+        );
         setOrders(updated);
         try {
           localStorage.setItem('porshibari_orders', JSON.stringify(updated));
         } catch (e) {
           console.error(e);
         }
-        idsToDelete.forEach((id) => {
-          deleteOrderFromFirestore(id).catch(console.warn);
-        });
+        await Promise.allSettled(idsToDelete.map((id) => deleteOrderFromFirestore(id)));
         setSelectedOrderIds([]);
-        showSuccessBanner('নির্বাচিত অর্ডারসমূহ মুছে ফেলা হয়েছে!');
+        showSuccessBanner('নির্বাচিত অর্ডারসমূহ সফলভাবে মুছে ফেলা হয়েছে!');
         setConfirmModal(null);
       },
     });

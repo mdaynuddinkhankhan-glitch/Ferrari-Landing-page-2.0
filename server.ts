@@ -318,10 +318,14 @@ app.patch('/api/orders/:id', (req: Request, res: Response) => {
 app.delete('/api/orders/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const cleanId = String(id).replace('#', '');
+  const alphaId = String(id).replace(/[^a-zA-Z0-9_-]/g, '');
 
   let orders = readJsonFile<any[]>(ORDERS_FILE, []);
   orders = orders.filter(
-    (o) => o.orderId !== id && String(o.orderId).replace('#', '') !== cleanId
+    (o) =>
+      o.orderId !== id &&
+      String(o.orderId).replace('#', '') !== cleanId &&
+      String(o.orderId).replace(/[^a-zA-Z0-9_-]/g, '') !== alphaId
   );
 
   writeJsonFile(ORDERS_FILE, orders);

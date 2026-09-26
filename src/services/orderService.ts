@@ -26,6 +26,44 @@ const STEADFAST_BOOKINGS_DOC = 'steadfast_bookings';
 const LOCAL_ORDERS_KEY = 'porshibari_orders';
 const PENDING_SYNC_KEY = 'porshibari_pending_sync_orders';
 const STEADFAST_BOOKINGS_KEY = 'porshibari_steadfast_bookings_v2';
+const DELETED_ORDERS_KEY = 'porshibari_deleted_orders_v2';
+
+export function getDeletedOrderIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_ORDERS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr.map((id: string) => String(id)));
+      }
+    }
+  } catch {}
+  return new Set();
+}
+
+export function isOrderDeleted(orderId?: string | null): boolean {
+  if (!orderId) return false;
+  const deletedSet = getDeletedOrderIds();
+  const idStr = String(orderId);
+  const cleanId = idStr.replace('#', '');
+  const docId = sanitizeOrderId(idStr);
+  return deletedSet.has(idStr) || deletedSet.has(cleanId) || deletedSet.has(`#${cleanId}`) || deletedSet.has(docId);
+}
+
+export function addDeletedOrderTombstone(orderId: string): void {
+  try {
+    const deletedSet = getDeletedOrderIds();
+    const idStr = String(orderId);
+    const cleanId = idStr.replace('#', '');
+    const docId = sanitizeOrderId(idStr);
+    deletedSet.add(idStr);
+    deletedSet.add(cleanId);
+    deletedSet.add(`#${cleanId}`);
+    deletedSet.add(docId);
+    const arr = Array.from(deletedSet).slice(-1000);
+    localStorage.setItem(DELETED_ORDERS_KEY, JSON.stringify(arr));
+  } catch {}
+}
 
 /**
  * Universal deep data cleaner to prevent Firestore undefined errors
@@ -419,19 +457,47 @@ export async function updateOrderInFirestore(
 
 export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
   const docId = sanitizeOrderId(orderId);
+  const cleanId = String(orderId || '').replace('#', '');
   const path = `${ORDERS_COLLECTION}/${docId}`;
 
-  // Remove from local cache
-  const localList = getLocalStoredOrders().filter((o) => o.orderId !== orderId && sanitizeOrderId(o.orderId) !== docId);
+  // 1. Add persistent tombstone to prevent resurrection across all tabs and sync cycles
+  addDeletedOrderTombstone(orderId);
+  addDeletedOrderTombstone(cleanId);
+  addDeletedOrderTombstone(`#${cleanId}`);
+  addDeletedOrderTombstone(docId);
+
+  // 2. Remove from local cache
+  const localList = getLocalStoredOrders().filter(
+    (o) =>
+      o.orderId !== orderId &&
+      sanitizeOrderId(o.orderId) !== docId &&
+      String(o.orderId || '').replace('#', '') !== cleanId
+  );
   saveLocalStoredOrders(localList);
 
-  // Delete from central server API
+  // 3. Remove from pending sync orders
+  const pendingList = getPendingSyncOrders().filter(
+    (o) =>
+      o.orderId !== orderId &&
+      sanitizeOrderId(o.orderId) !== docId &&
+      String(o.orderId || '').replace('#', '') !== cleanId
+  );
   try {
-    fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pendingList));
+  } catch {}
+
+  // 4. Remove local Steadfast bookings
+  removeLocalBooking(orderId);
+  removeLocalBooking(cleanId);
+  removeLocalBooking(`#${cleanId}`);
+
+  // 5. Delete from central server API
+  try {
+    await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
       method: 'DELETE',
-    }).catch(() => {});
-  } catch {
-    // ignore
+    });
+  } catch (err) {
+    console.warn('Server delete order error:', err);
   }
 
   if (isFirestoreQuotaExhausted()) {
@@ -439,8 +505,11 @@ export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
   }
 
   try {
-    const docRef = doc(db, ORDERS_COLLECTION, docId);
-    await deleteDoc(docRef);
+    await Promise.allSettled([
+      deleteDoc(doc(db, ORDERS_COLLECTION, docId)),
+      deleteDoc(doc(db, ORDERS_COLLECTION, cleanId)),
+      deleteDoc(doc(db, ORDERS_COLLECTION, `#${cleanId}`)),
+    ]);
   } catch (error) {
     if (isFirestoreQuotaError(error)) {
       markFirestoreQuotaExhausted();
@@ -469,24 +538,18 @@ export function subscribeToOrders(
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
-          const localOrders = getLocalStoredOrders();
-          const mergedMap = new Map<string, OrderConfirmation>();
+          // Filter out any order that has been marked as deleted
+          const serverOrders = data.orders.filter(
+            (o: OrderConfirmation) => o && o.orderId && !isOrderDeleted(o.orderId)
+          );
 
-          data.orders.forEach((o: OrderConfirmation) => {
-            if (o && o.orderId) mergedMap.set(o.orderId, o);
-          });
-          localOrders.forEach((o: OrderConfirmation) => {
-            if (o && o.orderId && !mergedMap.has(o.orderId)) mergedMap.set(o.orderId, o);
-          });
-
-          const merged = Array.from(mergedMap.values());
-          merged.sort((a, b) => {
+          serverOrders.sort((a: any, b: any) => {
             const timeA = new Date(a.createdAt || a.orderTime || 0).getTime();
             const timeB = new Date(b.createdAt || b.orderTime || 0).getTime();
             return timeB - timeA;
           });
-          saveLocalStoredOrders(merged);
-          onUpdate(merged);
+          saveLocalStoredOrders(serverOrders);
+          onUpdate(serverOrders);
         }
       }
     } catch {
@@ -506,7 +569,9 @@ export function subscribeToOrders(
         try {
           const parsed = JSON.parse(event.data);
           if (parsed.type === 'orders_update' && Array.isArray(parsed.data)) {
-            const serverOrders = parsed.data;
+            const serverOrders = parsed.data.filter(
+              (o: OrderConfirmation) => o && o.orderId && !isOrderDeleted(o.orderId)
+            );
             serverOrders.sort((a: any, b: any) => {
               const timeA = new Date(a.createdAt || a.orderTime || 0).getTime();
               const timeB = new Date(b.createdAt || b.orderTime || 0).getTime();
@@ -536,16 +601,20 @@ export function subscribeToOrders(
     (snapshot) => {
       const cloudOrders: OrderConfirmation[] = [];
       snapshot.forEach((d) => {
-        cloudOrders.push(d.data() as OrderConfirmation);
+        const data = d.data() as OrderConfirmation;
+        if (data && data.orderId && !isOrderDeleted(data.orderId)) {
+          cloudOrders.push(data);
+        }
       });
 
-      const localOrders = getLocalStoredOrders();
+      const localOrders = getLocalStoredOrders().filter((o) => o && o.orderId && !isOrderDeleted(o.orderId));
       const localBookings = getLocalBookings();
 
       const mergedOrders: OrderConfirmation[] = [];
       const seenOrderIds = new Set<string>();
 
       for (const cloud of cloudOrders) {
+        if (isOrderDeleted(cloud.orderId)) continue;
         const cleanId = String(cloud.orderId || '').replace('#', '');
 
         if (!cloud.steadfastSent) {
@@ -580,6 +649,7 @@ export function subscribeToOrders(
       const pendingSyncList = getPendingSyncOrders();
       if (pendingSyncList.length > 0) {
         for (const pending of pendingSyncList) {
+          if (isOrderDeleted(pending.orderId)) continue;
           const cleanId = String(pending.orderId || '').replace('#', '');
           if (!seenOrderIds.has(pending.orderId) && !seenOrderIds.has(cleanId)) {
             mergedOrders.push(pending);
@@ -591,6 +661,7 @@ export function subscribeToOrders(
 
       // Merge local orders that might not be in cloud yet
       for (const loc of localOrders) {
+        if (isOrderDeleted(loc.orderId)) continue;
         const cleanId = String(loc.orderId || '').replace('#', '');
         if (!seenOrderIds.has(loc.orderId) && !seenOrderIds.has(cleanId)) {
           mergedOrders.push(loc);
