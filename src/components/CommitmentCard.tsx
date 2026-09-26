@@ -13,21 +13,21 @@ export const CommitmentCard: React.FC<CommitmentCardProps> = ({
   pillText = '🤝 পার্সেল খুলে চেক করে নেওয়ার নিশ্চয়তা',
 }) => {
   return (
-    <section className="mx-4 sm:mx-5 my-8 p-6 sm:p-8 rounded-2xl bg-gradient-to-b from-[#26000b] via-[#61011d] to-[#ed1957] text-center shadow-2xl border border-pink-500/30">
+    <section className="mx-3 sm:mx-5 my-6 sm:my-8 p-4 sm:p-7 rounded-xl sm:rounded-2xl bg-gradient-to-b from-[#26000b] via-[#61011d] to-[#ed1957] text-center shadow-2xl border border-pink-500/30">
       {/* Top Badge */}
-      <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/40 text-amber-300 text-xs sm:text-sm font-semibold mb-4 border border-amber-300/20">
-        <AlertCircle className="w-4 h-4 text-amber-300" />
-        <span>{badge}</span>
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 text-amber-300 text-xs sm:text-sm font-semibold mb-3 border border-amber-300/20">
+        <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 shrink-0" />
+        <span className="leading-tight">{badge}</span>
       </div>
 
       {/* Main Commitment / Notice Description */}
-      <p className="text-base sm:text-lg md:text-xl font-bold leading-relaxed sm:leading-loose text-white/95 max-w-xl mx-auto tracking-wide">
+      <p className="text-sm sm:text-base md:text-lg font-bold leading-relaxed text-white/95 max-w-xl mx-auto tracking-wide">
         {description}
       </p>
 
       {/* Bottom Guarantee / Trust Pill */}
-      <div className="mt-5 inline-flex items-center gap-2 bg-yellow-400 text-black px-4 sm:px-5 py-2 rounded-full font-bold text-sm sm:text-base shadow-md">
-        <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-800" />
+      <div className="mt-4 sm:mt-5 inline-flex items-center gap-2 bg-yellow-400 text-black px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm md:text-base shadow-md">
+        <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-800 shrink-0" />
         <span>{pillText}</span>
       </div>
     </section>

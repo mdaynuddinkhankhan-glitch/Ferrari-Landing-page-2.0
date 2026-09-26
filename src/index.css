@@ -5,9 +5,18 @@
   --font-baloo: "Baloo Da 2", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+*, ::before, ::after {
+  box-sizing: border-box;
+}
+
 html {
   scroll-behavior: smooth;
   font-family: var(--font-hind);
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -16,14 +25,18 @@ body {
   font-family: var(--font-hind);
   margin: 0;
   padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Order Button Animations */
-/* Crisp High-Definition Natural Image Rendering */
-img {
-  image-rendering: auto;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+/* Fluid media constraints */
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 @keyframes submitShimmer {

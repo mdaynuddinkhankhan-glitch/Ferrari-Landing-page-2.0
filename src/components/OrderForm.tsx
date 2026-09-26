@@ -106,7 +106,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         .filter(Boolean);
       if (list.length > 0) return list;
     }
-    return ['M', 'L', 'XL', 'XXL', '3XL', '4XL'];
+    return ['M', 'L', 'XL', 'XXL', '3XL'];
   }, [sizeChartRows]);
 
   // Ensure selectedSize is valid when availableSizes changes
@@ -328,28 +328,28 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       {/* Form Title Banner */}
       <div
         ref={formHeaderRef}
-        className="mx-4 sm:mx-5 mb-6 py-5 px-4 text-center bg-gradient-to-b from-[#1c0009] to-[#ef1857] border-[5px] border-[#3c7770] rounded-[22px] shadow-xl text-white scroll-mt-2"
+        className="mx-3 sm:mx-5 mt-5 sm:mt-8 mb-4 sm:mb-6 py-3.5 sm:py-5 px-3 sm:px-4 text-center bg-gradient-to-b from-[#1c0009] to-[#ef1857] border-2 sm:border-[4px] border-[#3c7770] rounded-xl sm:rounded-[22px] shadow-xl text-white scroll-mt-2"
       >
-        <h2 className="text-2xl sm:text-3xl font-bold font-['Baloo_Da_2']">
+        <h2 className="text-lg sm:text-2xl md:text-3xl font-bold font-['Baloo_Da_2'] leading-snug">
           {bannerTitle}
         </h2>
       </div>
 
       {/* Main Order Form */}
-      <section className="bg-[#fff8f6] text-[#075f58] mx-4 sm:mx-5 mb-4 sm:mb-6 p-6 sm:p-8 rounded-[25px] border-4 border-[#096553] shadow-2xl">
+      <section className="bg-[#fff8f6] text-[#075f58] mx-3 sm:mx-5 mb-4 sm:mb-6 p-4 sm:p-7 rounded-xl sm:rounded-[25px] border-2 sm:border-4 border-[#096553] shadow-2xl">
         <form onSubmit={handleSubmit} noValidate>
           {errorMessage && (
-            <div className="mb-5 p-4 bg-red-50 border-2 border-red-500 rounded-xl text-red-700 flex items-start gap-2.5 text-sm sm:text-base font-semibold animate-shake">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+            <div className="mb-4 sm:mb-5 p-3.5 sm:p-4 bg-red-50 border-2 border-red-500 rounded-xl text-red-700 flex items-start gap-2 text-xs sm:text-sm md:text-base font-semibold animate-shake">
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5 text-red-600" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {/* Customer Name */}
-          <div className="mb-3.5">
+          <div className="mb-3 sm:mb-3.5">
             <label
               htmlFor="customerName"
-              className="block text-base sm:text-lg font-bold mb-1.5 text-[#075f58]"
+              className="block text-sm sm:text-base font-bold mb-1 text-[#075f58]"
             >
               {formNameLabel} <span className="text-red-500">*</span>
             </label>
@@ -365,7 +365,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               }}
               placeholder={formNameLabel}
               required
-              className={`w-full p-3 sm:p-3.5 border-2 rounded-xl text-base outline-none bg-white text-neutral-900 transition-all ${
+              className={`w-full p-2.5 sm:p-3.5 border-2 rounded-xl text-sm sm:text-base outline-none bg-white text-neutral-900 transition-all ${
                 errorMessage && !customerName.trim()
                   ? 'border-red-500 ring-2 ring-red-200'
                   : 'border-[#087060] focus:ring-2 focus:ring-[#087060]'
@@ -374,10 +374,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
 
           {/* Customer Phone */}
-          <div className="mb-3.5">
+          <div className="mb-3 sm:mb-3.5">
             <label
               htmlFor="customerPhone"
-              className="block text-base sm:text-lg font-bold mb-1.5 text-[#075f58]"
+              className="block text-sm sm:text-base font-bold mb-1 text-[#075f58]"
             >
               {formPhoneLabel} <span className="text-red-500">*</span>
             </label>
@@ -412,7 +412,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               }}
               placeholder="01XXXXXXXXX বা 8801XXXXXXXXX"
               required
-              className={`w-full p-3 sm:p-3.5 border-2 rounded-xl text-base outline-none bg-white text-neutral-900 transition-all ${
+              className={`w-full p-2.5 sm:p-3.5 border-2 rounded-xl text-sm sm:text-base outline-none bg-white text-neutral-900 transition-all ${
                 errorMessage && (errorMessage.includes('মোবাইল') || errorMessage.includes('নাম্বার') || errorMessage.includes('ডিজিট'))
                   ? 'border-red-500 ring-2 ring-red-300 bg-red-50/30 text-red-950'
                   : 'border-[#087060] focus:ring-2 focus:ring-[#087060]'
@@ -427,10 +427,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
 
           {/* Customer Address */}
-          <div className="mb-4">
+          <div className="mb-3.5 sm:mb-4">
             <label
               htmlFor="customerAddress"
-              className="block text-base sm:text-lg font-bold mb-1.5 text-[#075f58]"
+              className="block text-sm sm:text-base font-bold mb-1 text-[#075f58]"
             >
               {formAddressLabel} <span className="text-red-500">*</span>
             </label>
@@ -446,7 +446,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               placeholder="আপনার সম্পূর্ণ ঠিকানা (বাড়ি নং, রোড নং, থানা, জেলা)"
               required
               rows={2}
-              className={`w-full p-3 sm:p-3.5 border-2 rounded-xl text-base outline-none bg-white text-neutral-900 transition-all resize-y ${
+              className={`w-full p-2.5 sm:p-3.5 border-2 rounded-xl text-sm sm:text-base outline-none bg-white text-neutral-900 transition-all resize-y ${
                 errorMessage && !customerAddress.trim()
                   ? 'border-red-500 ring-2 ring-red-200'
                   : 'border-[#087060] focus:ring-2 focus:ring-[#087060]'
@@ -455,8 +455,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
 
           {/* Size Options (Vertical layout matching the uploaded screenshot, dynamically linked with Size Chart) */}
-          <div className="mb-5">
-            <label className="block text-lg sm:text-xl font-bold mb-2.5 text-[#075f58]">
+          <div className="mb-4 sm:mb-5">
+            <label className="block text-base sm:text-lg font-bold mb-2 text-[#075f58]">
               কোন সাইজ নিবেন (সিলেক্ট করুন)<span className="text-red-500">*</span>
             </label>
 
@@ -467,7 +467,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                   <label
                     key={size}
                     onClick={() => onSelectSize(size)}
-                    className="flex items-center gap-3 cursor-pointer py-1.5 px-1 rounded-lg group select-none w-full hover:bg-black/[0.03] transition-colors"
+                    className="flex items-center gap-2.5 sm:gap-3 cursor-pointer py-1.5 px-1 rounded-lg group select-none w-full hover:bg-black/[0.03] transition-colors"
                   >
                     <div
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
@@ -488,7 +488,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                       onChange={() => onSelectSize(size)}
                       className="sr-only"
                     />
-                    <span className="text-base sm:text-lg font-bold text-[#075f58] flex items-center">
+                    <span className="text-sm sm:text-base font-bold text-[#075f58] flex items-center">
                       {size}
                       <span className="text-red-500 font-bold ml-1">*</span>
                     </span>
@@ -655,26 +655,26 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           {/* Confirm Order Button with entrance and pulse animation */}
           <div
             ref={buttonContainerRef}
-            className={`mt-5 transition-all duration-700 ease-out ${
+            className={`mt-4 sm:mt-5 transition-all duration-700 ease-out ${
               isButtonInView ? 'order-submit-entrance' : 'opacity-0 translate-y-6 scale-95'
             }`}
           >
             <button
               type="submit"
               disabled={isSubmitting}
-              className="group relative overflow-hidden w-full py-3.5 sm:py-4 px-6 rounded-xl sm:rounded-2xl border-2 sm:border-3 border-[#00d09c] bg-gradient-to-r from-[#003c2e] via-[#005a44] to-[#003c2e] text-white text-lg sm:text-xl font-bold order-submit-pulse hover:brightness-110 hover:scale-[1.015] active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 shadow-[0_4px_25px_rgba(0,152,117,0.45)]"
+              className="group relative overflow-hidden w-full py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl sm:rounded-2xl border-2 sm:border-3 border-[#00d09c] bg-gradient-to-r from-[#003c2e] via-[#005a44] to-[#003c2e] text-white text-base sm:text-lg md:text-xl font-bold order-submit-pulse hover:brightness-110 hover:scale-[1.015] active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(0,152,117,0.4)] min-h-[48px]"
             >
               {/* Glossy shimmer sweep effect */}
               <span className="order-submit-shimmer" aria-hidden="true" />
 
               {isSubmitting ? (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 text-sm sm:text-base">
                   <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                   <span>অর্ডার প্রসেস হচ্ছে...</span>
                 </span>
               ) : (
                 <span className="relative z-10 flex items-center justify-center gap-2 drop-shadow-sm font-['Baloo_Da_2',sans-serif]">
-                  <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-[#48f2b8]" />
+                  <ShoppingCart className="w-5 h-5 text-[#48f2b8] shrink-0" />
                   <span>{formSubmitButtonText || 'অর্ডার কনফার্ম করুন'}</span>
                 </span>
               )}

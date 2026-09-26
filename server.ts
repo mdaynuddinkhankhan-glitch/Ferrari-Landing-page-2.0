@@ -19,7 +19,9 @@ app.use('/api', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
@@ -31,6 +33,8 @@ const DATA_DIR = path.resolve(__dirname, 'data');
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const ADMIN_AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
+const VISITORS_FILE = path.join(DATA_DIR, 'visitors.json');
 
 // Ensure data and uploads directories exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -40,12 +44,13 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Serve uploaded permanent images statically
+// Serve uploaded permanent images statically with CORS and client-side revalidation
 app.use('/uploads', express.static(UPLOADS_DIR, {
-  maxAge: '1d',
+  maxAge: '1h',
   immutable: false,
   setHeaders: (res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
   }
 }));
 
@@ -62,13 +67,15 @@ function readJsonFile<T>(filePath: string, defaultValue: T): T {
   return defaultValue;
 }
 
-function writeJsonFile<T>(filePath: string, data: T): void {
+function writeJsonFile<T>(filePath: string, data: T): boolean {
   try {
-    const tempPath = `${filePath}.tmp`;
+    const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).substring(2, 7)}.tmp`;
     fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
     fs.renameSync(tempPath, filePath);
+    return true;
   } catch (err) {
     console.error(`Error writing ${filePath}:`, err);
+    return false;
   }
 }
 
@@ -132,7 +139,7 @@ app.post('/api/upload', (req: Request, res: Response) => {
     const filePath = path.join(targetFolder, safeName);
     fs.writeFileSync(filePath, buffer);
 
-    const publicUrl = `/uploads/${safeFolder}/${safeName}`;
+    const publicUrl = `/uploads/${safeFolder}/${safeName}?v=${Date.now()}`;
     res.json({ success: true, url: publicUrl });
   } catch (err: any) {
     console.error('Server image upload error:', err);
@@ -221,16 +228,24 @@ app.post('/api/settings', (req: Request, res: Response) => {
   }
 
   const existing = readJsonFile(SETTINGS_FILE, {});
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
+
   const merged = {
     ...existing,
     ...incoming,
-    serverUpdatedAt: new Date().toISOString(),
-    serverUpdatedAtMs: Date.now(),
+    updatedAt: incoming.updatedAt || nowIso,
+    updatedAtMs: incoming.updatedAtMs || nowMs,
+    serverUpdatedAt: nowIso,
+    serverUpdatedAtMs: nowMs,
   };
 
-  writeJsonFile(SETTINGS_FILE, merged);
-  broadcastSettings(merged);
+  const ok = writeJsonFile(SETTINGS_FILE, merged);
+  if (!ok) {
+    return res.status(500).json({ success: false, error: 'Failed to write settings to database file' });
+  }
 
+  broadcastSettings(merged);
   res.json({ success: true, settings: merged });
 });
 
@@ -313,6 +328,84 @@ app.delete('/api/orders/:id', (req: Request, res: Response) => {
   broadcastOrders(orders);
 
   res.json({ success: true });
+});
+
+// -------------------------------------------------------------
+// Admin Auth API Endpoints (Cross-device Central Persistence)
+// -------------------------------------------------------------
+app.get('/api/admin-auth', (_req: Request, res: Response) => {
+  const authData = readJsonFile(ADMIN_AUTH_FILE, { password: 'admin1' });
+  res.json({ success: true, password: authData.password || 'admin1' });
+});
+
+app.post('/api/admin-auth', (req: Request, res: Response) => {
+  const { password } = req.body || {};
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ success: false, error: 'Password required' });
+  }
+  const authData = { password: password.trim(), updatedAt: new Date().toISOString() };
+  writeJsonFile(ADMIN_AUTH_FILE, authData);
+  res.json({ success: true, password: authData.password });
+});
+
+// -------------------------------------------------------------
+// Visitors API Endpoints (Real Unique Phone Counting)
+// -------------------------------------------------------------
+app.get('/api/visitors', (_req: Request, res: Response) => {
+  const today = new Date().toISOString().split('T')[0];
+  let stats = readJsonFile(VISITORS_FILE, { totalVisits: 0, todayVisits: 0, lastDate: today, deviceIds: [] });
+  if (stats.lastDate !== today) {
+    stats = { ...stats, todayVisits: 0, lastDate: today };
+    writeJsonFile(VISITORS_FILE, stats);
+  }
+  res.json({
+    success: true,
+    totalVisits: stats.totalVisits || 0,
+    todayVisits: stats.todayVisits || 0,
+    lastDate: today,
+  });
+});
+
+app.post('/api/visitors', (req: Request, res: Response) => {
+  const { deviceId, shouldIncrementTotal, shouldIncrementToday } = req.body || {};
+  const today = new Date().toISOString().split('T')[0];
+  let stats = readJsonFile(VISITORS_FILE, { totalVisits: 0, todayVisits: 0, lastDate: today, deviceIds: [] });
+  if (stats.lastDate !== today) {
+    stats.todayVisits = 0;
+    stats.lastDate = today;
+  }
+  if (!Array.isArray(stats.deviceIds)) {
+    stats.deviceIds = [];
+  }
+
+  let changed = false;
+  if (deviceId && !stats.deviceIds.includes(deviceId)) {
+    stats.deviceIds.push(deviceId);
+    if (stats.deviceIds.length > 5000) {
+      stats.deviceIds = stats.deviceIds.slice(-4000);
+    }
+    changed = true;
+  }
+
+  if (shouldIncrementTotal) {
+    stats.totalVisits = (stats.totalVisits || 0) + 1;
+    changed = true;
+  }
+  if (shouldIncrementToday) {
+    stats.todayVisits = (stats.todayVisits || 0) + 1;
+    changed = true;
+  }
+
+  if (changed) {
+    writeJsonFile(VISITORS_FILE, stats);
+  }
+
+  res.json({
+    success: true,
+    totalVisits: stats.totalVisits || 0,
+    todayVisits: stats.todayVisits || 0,
+    lastDate: today,
+  });
 });
 
 // -------------------------------------------------------------
@@ -412,11 +505,31 @@ async function startServer() {
       server: { middlewareMode: true, host: '0.0.0.0', port: Number(PORT) },
       appType: 'spa',
     });
+    // Ensure index.html and SPA navigation are never cached by browser
+    app.use((req, res, next) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads') && !req.path.includes('.')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      next();
+    });
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      }
+    }));
     app.get('*', (_req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

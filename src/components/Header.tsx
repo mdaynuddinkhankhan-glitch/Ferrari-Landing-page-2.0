@@ -49,9 +49,9 @@ export const Header: React.FC<HeaderProps> = ({
         className="inline-block cursor-pointer active:opacity-90 transition-opacity"
         title={`${brandNamePart1} ${brandNamePart2}`}
       >
-        <h1 className="text-[#ff146b] font-sans text-2xl sm:text-[28px] font-bold tracking-normal leading-none">
+        <h1 className="text-[#ff146b] font-sans text-sm sm:text-base md:text-lg font-bold tracking-normal leading-tight">
           {brandNamePart1}
-          <span className="block text-2xl sm:text-[28px] text-[#ff146b] font-bold tracking-normal leading-none mt-0.5">
+          <span className="block text-sm sm:text-base md:text-lg text-[#ff146b] font-bold tracking-normal leading-tight mt-0.5">
             {brandNamePart2}
           </span>
         </h1>

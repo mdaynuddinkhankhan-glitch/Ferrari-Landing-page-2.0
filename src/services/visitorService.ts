@@ -147,81 +147,92 @@ export async function recordWebsiteVisit(): Promise<VisitorStats> {
   };
   saveLocalVisitorStats(newStats);
 
-  // Sync atomic update with Firestore cloud database
+  // Sync with Central Server API
+  try {
+    const res = await fetch('/api/visitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deviceId: getOrCreateDeviceId(),
+        shouldIncrementTotal,
+        shouldIncrementToday,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        const serverStats: VisitorStats = {
+          totalVisits: data.totalVisits,
+          todayVisits: data.todayVisits,
+          lastDate: data.lastDate,
+        };
+        saveLocalVisitorStats(serverStats);
+        return serverStats;
+      }
+    }
+  } catch {}
+
+  // Optional background sync to Firestore
   if (!isFirestoreQuotaExhausted()) {
     try {
       const docRef = doc(db, SETTINGS_COLLECTION, VISITOR_DOC_ID);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const cloudData = docSnap.data();
-        const cloudLastDate = cloudData.lastDate || today;
-        const isCloudSameDay = cloudLastDate === today;
-
-        const updatePayload: Record<string, any> = {
-          lastDate: today,
-          updatedAt: new Date().toISOString(),
-        };
-
-        if (shouldIncrementTotal) {
-          updatePayload.totalVisits = increment(1);
-        }
-
-        if (isCloudSameDay) {
-          if (shouldIncrementToday) {
-            updatePayload.todayVisits = increment(1);
-          }
-        } else {
-          // Date rolled over to new day
-          updatePayload.todayVisits = 1;
-        }
-
-        await setDoc(docRef, updatePayload, { merge: true });
-      } else {
-        // Initial Firestore document creation
-        await setDoc(
-          docRef,
-          {
-            totalVisits: 1,
-            todayVisits: 1,
-            lastDate: today,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+      const updatePayload: Record<string, any> = {
+        lastDate: today,
+        updatedAt: new Date().toISOString(),
+      };
+      if (shouldIncrementTotal) {
+        updatePayload.totalVisits = increment(1);
       }
-    } catch (error) {
-      if (isFirestoreQuotaError(error)) {
-        markFirestoreQuotaExhausted();
-      } else {
-        console.warn('Visitor tracking cloud sync note:', error);
+      if (shouldIncrementToday) {
+        updatePayload.todayVisits = increment(1);
       }
-    }
+      setDoc(docRef, updatePayload, { merge: true }).catch(() => {});
+    } catch {}
   }
 
   return newStats;
 }
 
 /**
- * Subscribe to real-time visitor stats updates from Firestore
+ * Subscribe to real-time visitor stats updates from Central Server & Firestore
  */
 export function subscribeVisitorStats(callback: (stats: VisitorStats) => void): () => void {
   // Always emit local data immediately
   callback(getLocalVisitorStats());
 
+  // Fetch from Central Server API
+  const fetchServerStats = async () => {
+    try {
+      const res = await fetch(`/api/visitors?_t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          const stats: VisitorStats = {
+            totalVisits: data.totalVisits,
+            todayVisits: data.todayVisits,
+            lastDate: data.lastDate,
+          };
+          saveLocalVisitorStats(stats);
+          callback(stats);
+        }
+      }
+    } catch {}
+  };
+
+  fetchServerStats();
+  const pollTimer = setInterval(fetchServerStats, 10000);
+
+  let unsubscribeFirestore = () => {};
   try {
     const docRef = doc(db, SETTINGS_COLLECTION, VISITOR_DOC_ID);
-    const unsubscribe = onSnapshot(
+    unsubscribeFirestore = onSnapshot(
       docRef,
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
           const today = getTodayString();
           let total = typeof data.totalVisits === 'number' ? data.totalVisits : 0;
-          
-          if (total >= 4500) {
-            total = 1;
-          }
+          if (total >= 4500) total = 1;
 
           const stats: VisitorStats = {
             totalVisits: Math.max(0, total),
@@ -233,29 +244,18 @@ export function subscribeVisitorStats(callback: (stats: VisitorStats) => void): 
           };
           saveLocalVisitorStats(stats);
           callback(stats);
-        } else {
-          // Initialize local baseline without firing external write loop
-          const initial = {
-            totalVisits: 1,
-            todayVisits: 1,
-            lastDate: getTodayString(),
-            updatedAt: new Date().toISOString(),
-          };
-          saveLocalVisitorStats(initial);
-          callback(initial);
         }
       },
-      (error) => {
-        if (isFirestoreQuotaError(error)) {
-          markFirestoreQuotaExhausted();
-        }
-        console.warn('Visitor stats live subscription offline or error:', error);
-      }
+      () => {}
     );
-    return unsubscribe;
-  } catch {
-    return () => {};
-  }
+  } catch {}
+
+  return () => {
+    clearInterval(pollTimer);
+    try {
+      unsubscribeFirestore();
+    } catch {}
+  };
 }
 
 /**
@@ -269,27 +269,13 @@ export async function updateVisitorCount(newTotal: number): Promise<void> {
   };
   saveLocalVisitorStats(updated);
 
-  if (isFirestoreQuotaExhausted()) {
-    return;
-  }
-
   try {
-    const docRef = doc(db, SETTINGS_COLLECTION, VISITOR_DOC_ID);
-    await setDoc(
-      docRef,
-      {
+    await fetch('/api/visitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         totalVisits: updated.totalVisits,
-        todayVisits: updated.todayVisits,
-        lastDate: updated.lastDate,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    if (isFirestoreQuotaError(error)) {
-      markFirestoreQuotaExhausted();
-      return;
-    }
-    console.warn('Update visitor count note:', error);
-  }
+      }),
+    });
+  } catch {}
 }

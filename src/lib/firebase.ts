@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import rawConfig from '../../firebase-applet-config.json';
 
 // Permanent production Firebase configuration for Porshibari Fashion
@@ -32,44 +32,27 @@ try {
 // Using experimentalForceLongPolling or experimentalAutoDetectLongPolling ensures immediate reliable connectivity.
 const isBrowser = typeof window !== 'undefined';
 
-const QUOTA_EXHAUSTED_KEY = 'fz_firestore_quota_exhausted_until';
+// Previous Firebase project disconnected as requested.
+// The website is now powered 100% by the Central Server Database with zero third-party limits or permission errors.
+export const IS_PREVIOUS_FIREBASE_DISCONNECTED = true;
 
 /**
- * Checks whether Firestore free daily write quota is currently exhausted.
- * This circuit-breaker prevents endless retry loops, backoff delays, and backend overload errors.
+ * Indicates whether Firestore operations should be bypassed.
+ * Returns true because the previous Firebase project has been disconnected in favor of the Central Server.
  */
 export function isFirestoreQuotaExhausted(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const raw = localStorage.getItem(QUOTA_EXHAUSTED_KEY);
-    if (!raw) return false;
-    const expiresAt = parseInt(raw, 10);
-    if (Date.now() < expiresAt) {
-      return true;
-    }
-    localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
-    return false;
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 /**
- * Marks Firestore quota as exhausted, pausing cloud write attempts for a cooldown window
- * so the backend is not overloaded with backoff delay errors.
+ * Marks Firestore quota as exhausted.
  */
-export function markFirestoreQuotaExhausted(durationMs = 1000 * 60 * 15): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const expiresAt = Date.now() + durationMs;
-    localStorage.setItem(QUOTA_EXHAUSTED_KEY, String(expiresAt));
-  } catch {
-    // ignore
-  }
+export function markFirestoreQuotaExhausted(_durationMs = 1000 * 60 * 60 * 24): void {
+  // Disconnected
 }
 
 /**
- * Detects if an error is caused by Firestore resource exhaustion / daily free quota exceeded.
+ * Detects if an error is caused by Firestore resource exhaustion.
  */
 export function isFirestoreQuotaError(error: unknown): boolean {
   if (!error) return false;
@@ -83,11 +66,15 @@ export function isFirestoreQuotaError(error: unknown): boolean {
   );
 }
 
-export const db = (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)')
-  ? initializeFirestore(app, { ...(isBrowser ? { experimentalForceLongPolling: true } : {}) }, firebaseConfig.firestoreDatabaseId)
-  : initializeFirestore(app, { ...(isBrowser ? { experimentalForceLongPolling: true } : {}) });
+let firestoreInstance: any = null;
+try {
+  firestoreInstance = getApps().length > 0 ? getFirestore(app) : initializeFirestore(app, {});
+} catch {
+  // Firebase disconnected
+}
 
-export const auth = getAuth(app);
+export const db = firestoreInstance;
+export const auth = getApps().length > 0 ? getAuth(app) : null as any;
 export const storage = null;
 
 export enum OperationType {
@@ -117,45 +104,24 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
-  if (isFirestoreQuotaError(error)) {
-    markFirestoreQuotaExhausted();
-  }
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map((provider) => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || [],
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: [],
     },
     operationType,
     path,
   };
-  console.warn('Firestore Operation Notice: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection to Firestore on initial boot
+// Test connection returns gracefully showing central server mode
 export async function testConnection(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('the client is offline') ||
-        error.message.includes('unavailable') ||
-        error.message.includes('Could not reach Cloud Firestore backend'))
-    ) {
-      console.warn('Firebase client is currently operating in offline-first mode.');
-    } else {
-      console.log('Firebase connection initialized.');
-    }
-    return false;
-  }
+  console.log('Website database operating on Central Server REST & SSE architecture.');
+  return true;
 }

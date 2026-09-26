@@ -4,7 +4,7 @@ import { SiteSettings, SizeChartRowItem, DEFAULT_SIZE_CHART_ROWS } from '../util
 import { SizeChart } from './SizeChart';
 import { compressDataUrl } from '../utils/imageCompressor';
 import { uploadImageFileToCloud } from '../services/imageUploadService';
-import defaultSizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
+import { DEFAULT_SIZE_CHART_IMG } from '../utils/defaultImages';
 
 interface SizeChartManagerProps {
   settings: SiteSettings;
@@ -31,13 +31,17 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
   const [displayMode, setDisplayMode] = useState<'table' | 'image' | 'both'>(
     settings.sizeChartDisplayMode || 'table'
   );
-  const [chartImage, setChartImage] = useState<string>(settings.sizeChartImage || defaultSizeChartImg);
+  const [chartImage, setChartImage] = useState<string>(settings.sizeChartImage || DEFAULT_SIZE_CHART_IMG);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImg, setIsUploadingImg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastLocalEditTimeRef = useRef<number>(0);
 
-  // Sync state if settings prop changes externally
+  // Sync state if settings prop changes externally and not recently edited locally
   React.useEffect(() => {
+    const isRecentlyEdited = Date.now() - lastLocalEditTimeRef.current < 15000;
+    if (isRecentlyEdited) return;
+
     if (settings.sizeChartRows && settings.sizeChartRows.length > 0) {
       setRows(settings.sizeChartRows);
     }
@@ -48,6 +52,7 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
   }, [settings.sizeChartRows, settings.sizeChartTitle, settings.sizeChartSubtitle, settings.sizeChartDisplayMode, settings.sizeChartImage]);
 
   const handleRowChange = (index: number, field: keyof SizeChartRowItem, value: string) => {
+    lastLocalEditTimeRef.current = Date.now();
     const updated = [...rows];
     updated[index] = {
       ...updated[index],
@@ -57,9 +62,11 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
   };
 
   const handleAddRow = () => {
+    lastLocalEditTimeRef.current = Date.now();
+    const nextSizeNum = rows.length + 3;
     const newRow: SizeChartRowItem = {
       id: `custom_${Date.now()}`,
-      size: '5XL',
+      size: `${nextSizeNum}XL`,
       chest: '52',
       shoulder: '23.5',
       length: '33',
@@ -67,22 +74,66 @@ export const SizeChartManager: React.FC<SizeChartManagerProps> = ({
     setRows([...rows, newRow]);
   };
 
-  const handleDeleteRow = (index: number) => {
+  const handleDeleteRow = async (index: number) => {
     if (rows.length <= 1) {
       if (showErrorBanner) showErrorBanner('কমপক্ষে একটি সাইজের রো রাখা আবশ্যক!');
       return;
     }
+    lastLocalEditTimeRef.current = Date.now();
+    const deletedRow = rows[index];
     const updated = rows.filter((_, idx) => idx !== index);
     setRows(updated);
+
+    const sizeNames = updated
+      .map((r) => (r.size ? r.size.trim() : ''))
+      .filter(Boolean)
+      .join(', ');
+
+    const newSettings: SiteSettings = {
+      ...settings,
+      sizeChartTitle: title,
+      sizeChartSubtitle: subtitle,
+      sizeChartRows: updated,
+      sizesRowText: sizeNames ? `Size: ${sizeNames}` : settings.sizesRowText,
+      sizeChartImage: chartImage,
+      sizeChartDisplayMode: displayMode,
+    };
+
+    try {
+      await onUpdateSettings(newSettings);
+      if (showSuccessBanner) {
+        showSuccessBanner(`সাইজ "${deletedRow.size}" সফলভাবে ডিলিট করা হয়েছে এবং লাইভ সেভ হয়েছে! 🎉`);
+      }
+    } catch (err: any) {
+      console.warn('Error saving size deletion:', err);
+    }
   };
 
-  const handleResetToDefault = () => {
+  const handleResetToDefault = async () => {
+    lastLocalEditTimeRef.current = Date.now();
     setRows(DEFAULT_SIZE_CHART_ROWS);
     setTitle('সাইজ চার্ট (Ferrari Jacket Size Chart)');
     setSubtitle('আপনার সঠিক মাপ দেখে নিচে অর্ডার ফর্মে সাইজ সিলেক্ট করুন (সব মাপ ইঞ্চিতে)');
     setDisplayMode('image');
-    setChartImage(defaultSizeChartImg);
-    if (showSuccessBanner) showSuccessBanner('ডিফল্ট সাইজ চার্ট রিস্টোর করা হয়েছে। সেভ করতে নিচের বাটনে ক্লিক করুন।');
+    setChartImage(DEFAULT_SIZE_CHART_IMG);
+
+    const sizeNames = DEFAULT_SIZE_CHART_ROWS.map((r) => r.size).join(', ');
+    const resetSettings: SiteSettings = {
+      ...settings,
+      sizeChartTitle: 'সাইজ চার্ট (Ferrari Jacket Size Chart)',
+      sizeChartSubtitle: 'আপনার সঠিক মাপ দেখে নিচে অর্ডার ফর্মে সাইজ সিলেক্ট করুন (সব মাপ ইঞ্চিতে)',
+      sizeChartRows: DEFAULT_SIZE_CHART_ROWS,
+      sizesRowText: `Size: ${sizeNames}`,
+      sizeChartImage: DEFAULT_SIZE_CHART_IMG,
+      sizeChartDisplayMode: 'image',
+    };
+
+    try {
+      await onUpdateSettings(resetSettings);
+      if (showSuccessBanner) showSuccessBanner('ডিফল্ট সাইজ চার্ট রিস্টোর করা হয়েছে এবং লাইভ সেভ হয়েছে! 🎉');
+    } catch {
+      if (showSuccessBanner) showSuccessBanner('ডিফল্ট সাইজ চার্ট লোড হয়েছে। সেভ করতে নিচের বাটনে ক্লিক করুন।');
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

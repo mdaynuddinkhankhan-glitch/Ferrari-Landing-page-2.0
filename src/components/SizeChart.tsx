@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Ruler, X } from 'lucide-react';
-import defaultSizeChartImg from '../assets/images/ferrari_size_chart_1790260219878.jpg';
+import { DEFAULT_SIZE_CHART_IMG } from '../utils/defaultImages';
 
 interface SizeChartProps {
   title?: string;
@@ -16,29 +16,29 @@ export const SizeChart: React.FC<SizeChartProps> = ({
   image,
 }) => {
   const [isZoomOpen, setIsZoomOpen] = useState(false);
-  const displayImage = image && image.trim() ? image : defaultSizeChartImg;
+  const displayImage = image && image.trim() ? image : DEFAULT_SIZE_CHART_IMG;
 
   return (
     <section className="mx-2 sm:mx-4 mb-6">
       {/* Title Header */}
       <div className="flex items-center justify-center gap-1.5 mb-1 text-center">
-        <Ruler className="w-4 h-4 text-pink-400" />
-        <h3 className="font-['Baloo_Da_2'] text-xl sm:text-2xl font-bold text-white">
+        <Ruler className="w-4 h-4 text-pink-400 shrink-0" />
+        <h3 className="font-['Baloo_Da_2'] text-lg sm:text-xl md:text-2xl font-bold text-white">
           {title}
         </h3>
       </div>
       {subtitle && (
-        <p className="text-center text-neutral-400 text-[11px] sm:text-xs mb-3">
+        <p className="text-center text-neutral-400 text-[11px] sm:text-xs mb-3 px-2">
           {subtitle}
         </p>
       )}
 
       {/* Pure Size Chart Image Display */}
-      <div className="relative bg-neutral-900 rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-700 shadow-xl max-w-2xl mx-auto group">
+      <div className="relative bg-neutral-900 rounded-xl sm:rounded-2xl overflow-hidden border border-neutral-700 shadow-xl max-w-xl mx-auto group">
         <img
           src={displayImage}
           alt="Ferrari Jacket Size Chart"
-          className="w-full h-auto object-contain cursor-zoom-in max-h-[520px] mx-auto transition-transform duration-200 group-hover:scale-[1.01]"
+          className="w-full h-auto object-contain cursor-zoom-in max-h-[460px] mx-auto transition-transform duration-200 group-hover:scale-[1.01]"
           onClick={() => setIsZoomOpen(true)}
           loading="lazy"
         />

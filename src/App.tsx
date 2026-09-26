@@ -255,9 +255,9 @@ export default function App() {
   }
 
   return (
-    <div className="bg-neutral-950 min-h-screen text-white flex justify-center selection:bg-[#ff0870] selection:text-white">
-      {/* Outer constraint to 700px exactly as specified in the reference CSS */}
-      <main className="w-full max-w-[700px] bg-black min-h-screen shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden relative">
+    <div className="bg-neutral-950 min-h-screen text-white flex justify-center selection:bg-[#ff0870] selection:text-white w-full overflow-x-hidden">
+      {/* Outer constraint to 700px with fluid full responsiveness */}
+      <main className="w-full max-w-[700px] bg-black min-h-screen shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-x-hidden relative">
         {/* Header with secret 10-click admin trigger */}
         <Header
           brandNamePart1={siteSettings.brandNamePart1}

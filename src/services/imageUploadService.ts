@@ -16,31 +16,8 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
- * Uploads a compressed base64 data URL to the server API for permanent centralized storage
- */
-async function postImageToServer(dataUrl: string, folder: string): Promise<string> {
-  try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataUrl, folder }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.url) {
-        return data.url;
-      }
-    }
-  } catch (err) {
-    console.warn('Server upload fallback to optimized WebP dataUrl:', err);
-  }
-  return dataUrl;
-}
-
-/**
- * Optimizes an image File into a high-definition, lightweight WebP image
- * and uploads it to the central server and cloud storage.
+ * Optimizes an image File into a high-definition, ultra-compact WebP image
+ * and uploads it to the central server so all devices access the exact same URL.
  */
 export async function uploadImageFileToCloud(
   file: File,
@@ -48,16 +25,31 @@ export async function uploadImageFileToCloud(
 ): Promise<string> {
   const isBanner = folder === 'banners';
   const isSizeChart = folder === 'sizechart';
-  const maxDim = isBanner ? 1200 : isSizeChart ? 1000 : 800;
-  const quality = isBanner ? 0.85 : 0.82;
+  const maxDim = isBanner ? 1920 : isSizeChart ? 1600 : 1600;
+  const quality = 0.94;
 
   try {
-    // 1. Compress image locally to crisp, lightweight WebP
+    // 1. Compress image locally to ultra high-definition crisp WebP
     const compressedDataUrl = await compressImageFile(file, maxDim, quality);
 
-    // 2. Upload to central server storage for permanent universal URL
-    const serverUrl = await postImageToServer(compressedDataUrl, folder);
-    return serverUrl;
+    // 2. Persist to central server /api/upload endpoint
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: compressedDataUrl, folder }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.url) {
+          return data.url;
+        }
+      }
+    } catch (uploadErr) {
+      console.warn('Central server image upload failed, falling back to WebP data URL:', uploadErr);
+    }
+
+    return compressedDataUrl;
   } catch (err) {
     console.error('Failed to process image file:', err);
     throw err;
@@ -65,28 +57,51 @@ export async function uploadImageFileToCloud(
 }
 
 /**
- * Optimizes a base64 Data URL or returns an external URL directly.
+ * Optimizes a base64 Data URL and uploads to central server or returns clean URL.
  */
 export async function uploadDataUrlToCloud(
   dataUrl: string,
   folder: 'banners' | 'products' | 'sizechart' | 'general' = 'general'
 ): Promise<string> {
-  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+  if (!dataUrl) return '';
+
+  // If already a hosted URL, append cache-busting timestamp if it's an uploaded asset
+  if (!dataUrl.startsWith('data:image/')) {
+    if (dataUrl.startsWith('/uploads/') && !dataUrl.includes('?v=')) {
+      return `${dataUrl}?v=${Date.now()}`;
+    }
     return dataUrl;
   }
 
   const isBanner = folder === 'banners';
   const isSizeChart = folder === 'sizechart';
-  const maxDim = isBanner ? 1200 : isSizeChart ? 1000 : 800;
-  const quality = isBanner ? 0.85 : 0.82;
+  const maxDim = isBanner ? 1920 : isSizeChart ? 1600 : 1600;
+  const quality = 0.94;
 
   try {
     const compressed = await compressDataUrl(dataUrl, maxDim, quality, true);
-    const serverUrl = await postImageToServer(compressed, folder);
-    return serverUrl;
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: compressed, folder }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.url) {
+          return data.url;
+        }
+      }
+    } catch {
+      // fallback to compressed dataUrl
+    }
+
+    return compressed;
   } catch (err) {
     console.warn('DataURL optimization note:', err);
     return dataUrl;
   }
 }
+
 

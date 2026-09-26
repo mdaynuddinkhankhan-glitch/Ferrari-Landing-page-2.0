@@ -20,8 +20,8 @@ export const Footer: React.FC<FooterProps> = ({
   copyrightText = 'সর্বস্বত্ব সংরক্ষিত।',
 }) => {
   return (
-    <footer className="bg-gradient-to-b from-[#f51b58] to-[#ed1a56] text-white py-2.5 sm:py-3 px-3 sm:px-5 text-center border-t border-pink-400/40">
-      <h2 className="text-sm sm:text-base font-bold leading-tight mb-2 font-['Baloo_Da_2']">
+    <footer className="bg-gradient-to-b from-[#f51b58] to-[#ed1a56] text-white py-2 sm:py-2.5 px-3 sm:px-4 text-center border-t border-pink-400/40">
+      <h2 className="text-xs sm:text-sm font-bold leading-tight mb-1.5 font-['Baloo_Da_2'] px-2">
         {tagline}
       </h2>
 
@@ -31,16 +31,16 @@ export const Footer: React.FC<FooterProps> = ({
           href={`https://wa.me/${whatsappNumber}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl bg-gradient-to-r from-[#25D366] to-[#128C7E] text-white text-sm sm:text-base font-extrabold shadow-[0_4px_12px_rgba(37,211,102,0.35)] hover:brightness-105 active:scale-[0.98] transition-all duration-150"
+          className="inline-flex items-center justify-center gap-2 w-full py-1.5 px-3 rounded-lg bg-gradient-to-r from-[#25D366] to-[#128C7E] text-white text-xs sm:text-sm font-extrabold shadow-[0_2px_8px_rgba(37,211,102,0.3)] hover:brightness-105 active:scale-[0.98] transition-all duration-150 min-h-[38px]"
         >
           {/* Official WhatsApp Chat Bubble Icon from Lucide */}
-          <MessageCircle className="w-5 h-5 fill-white text-[#128C7E] shrink-0" />
+          <MessageCircle className="w-4 h-4 fill-white text-[#128C7E] shrink-0" />
           <span>WhatsApp {displayPhone}</span>
         </a>
       </div>
 
       {/* Trust & Copyright - Ultra compact row */}
-      <div className="mt-2 pt-1.5 border-t border-white/20 text-[10px] sm:text-[11px] text-pink-100 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+      <div className="mt-1.5 pt-1 text-[10px] sm:text-[11px] text-pink-100 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 opacity-90">
         <div className="inline-flex items-center gap-1">
           <ShieldCheck className="w-3 h-3 text-emerald-300 shrink-0" />
           <span>{trustText}</span>

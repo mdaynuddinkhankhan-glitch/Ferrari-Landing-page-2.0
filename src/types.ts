@@ -1,6 +1,6 @@
-export type ShirtSize = 'M' | 'L' | 'XL' | 'XXL' | '3XL' | '4XL' | string;
+export type ShirtSize = 'M' | 'L' | 'XL' | 'XXL' | '3XL' | string;
 
-export type ShirtColorId = 'black' | 'white' | 'red' | 'pink';
+export type ShirtColorId = 'black' | 'white' | 'red' | 'pink' | string;
 
 export type JacketSize = ShirtSize;
 export type JacketColorId = ShirtColorId;

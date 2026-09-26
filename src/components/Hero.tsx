@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import defaultBannerImg from '../assets/images/porshibari_collection_banner_1788721457342.jpg';
+import { DEFAULT_BANNER_IMG } from '../utils/defaultImages';
 import { AnimatedCtaButton } from './AnimatedCtaButton';
 
 interface HeroProps {
@@ -14,7 +14,7 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ 
   headline = 'প্রিমিয়াম লাক্সারি',
   highlight = 'Ferrari Jacket কালেকশন',
-  bannerImg = defaultBannerImg,
+  bannerImg = DEFAULT_BANNER_IMG,
   banners,
   ctaButtonText = '🛍️ অর্ডার করতে চাই',
   onOrderClick 
@@ -66,23 +66,23 @@ export const Hero: React.FC<HeroProps> = ({
   return (
     <section className="relative mb-3">
       {/* Top Hero Text Header */}
-      <div className="bg-gradient-to-b from-black/90 via-[#990838] to-[#db1250] text-center mt-2.5 pt-3 pb-3.5 px-4 text-white shadow-md overflow-hidden">
-        <h2 className="text-2xl sm:text-3xl md:text-[32px] font-extrabold leading-snug font-['Baloo_Da_2',sans-serif] tracking-wide text-white">
-          {headline}{' '}
-          <span className="text-white drop-shadow-xs inline-block translate-x-6 sm:translate-x-8 pl-3">
+      <div className="bg-gradient-to-b from-black/90 via-[#990838] to-[#db1250] text-center mt-1 pt-2 pb-2.5 px-3 sm:px-4 text-white shadow-md overflow-hidden">
+        <h2 className="text-lg sm:text-2xl md:text-[26px] font-extrabold leading-snug font-['Baloo_Da_2',sans-serif] tracking-wide text-white max-w-xl mx-auto">
+          <span>{headline}</span>{' '}
+          <span className="text-white drop-shadow-xs inline-block ml-2.5 sm:ml-4 pl-1.5 sm:pl-2 translate-x-1 sm:translate-x-0">
             {highlight}
           </span>
         </h2>
       </div>
 
       {/* Hero Showcase Banner / Smooth Horizontal Slider */}
-      <div className="px-3 sm:px-4 mt-5 sm:mt-6">
+      <div className="px-3 sm:px-4 mt-3 sm:mt-4">
         <div
           onClick={onOrderClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="relative mx-auto w-[94%] max-w-[540px] rounded-[20px] overflow-hidden border-2 border-[#ff146b]/40 shadow-[0_8px_30px_rgba(255,20,107,0.25)] group cursor-pointer bg-neutral-900 select-none"
+          className="relative mx-auto w-full max-w-[500px] rounded-xl sm:rounded-[20px] overflow-hidden border-2 border-[#ff146b]/40 shadow-[0_6px_25px_rgba(255,20,107,0.25)] group cursor-pointer bg-neutral-900 select-none"
         >
           {/* Horizontal Slide Track */}
           <div
@@ -92,9 +92,9 @@ export const Hero: React.FC<HeroProps> = ({
             {bannerList.map((bannerUrl, idx) => (
               <div key={idx} className="min-w-full w-full shrink-0">
                 <img
-                  src={bannerUrl || defaultBannerImg}
+                  src={bannerUrl || DEFAULT_BANNER_IMG}
                   alt={`Ferrari Jacket Collection Banner ${idx + 1}`}
-                  className="w-full h-auto aspect-[4/3] sm:aspect-[16/10] object-cover block"
+                  className="w-full h-auto aspect-[16/11] sm:aspect-[16/10] object-cover block"
                   referrerPolicy="no-referrer"
                   loading={idx === 0 ? 'eager' : 'lazy'}
                 />
@@ -105,7 +105,7 @@ export const Hero: React.FC<HeroProps> = ({
       </div>
 
       {/* Animated Order Button Below Banner */}
-      <div className="text-center mt-3.5 px-3">
+      <div className="text-center my-4 sm:my-5 px-3">
         <AnimatedCtaButton
           onClick={onOrderClick || (() => {})}
           label={ctaButtonText || "🛍️ অর্ডার করতে চাই"}

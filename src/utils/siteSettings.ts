@@ -1,9 +1,11 @@
 import { ShirtProduct, ShirtSize } from '../types';
-import blackImg from '../assets/images/ferrari_black.jpg';
-import whiteImg from '../assets/images/ferrari_white.jpg';
-import redImg from '../assets/images/ferrari_red.jpg';
-import bannerImg from '../assets/images/banner.jpg';
-import sizeChartImg from '../assets/images/size_chart.jpg';
+import {
+  DEFAULT_FERRARI_BLACK_IMG,
+  DEFAULT_FERRARI_WHITE_IMG,
+  DEFAULT_FERRARI_RED_IMG,
+  DEFAULT_BANNER_IMG,
+  DEFAULT_SIZE_CHART_IMG,
+} from './defaultImages';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import {
   db,
@@ -28,7 +30,6 @@ export const DEFAULT_SIZE_CHART_ROWS: SizeChartRowItem[] = [
   { size: 'XL', chest: '44', shoulder: '19.5', length: '29' },
   { size: 'XXL', chest: '46', shoulder: '20.5', length: '30' },
   { size: '3XL', chest: '48', shoulder: '21.5', length: '31' },
-  { size: '4XL', chest: '50', shoulder: '22.5', length: '32' },
 ];
 
 export interface SiteSettings {
@@ -91,8 +92,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   brandNamePart2: 'Fashion House',
   heroHeadline: '🚗 🔥 Premium Racing-Inspired',
   heroHighlight: 'Jacket 🏎️ 🔥',
-  heroBannerImg: bannerImg,
-  heroBanners: [bannerImg],
+  heroBannerImg: DEFAULT_BANNER_IMG,
+  heroBanners: [DEFAULT_BANNER_IMG],
   watermarkText: 'Porshibari.shop',
   watermarkOpacity: 0.20,
   watermarkPreventRightClick: true,
@@ -108,12 +109,12 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
 ভাইরাল এবং প্রিমিয়াম
 Ferrari Jacket টি।`,
   deliveryTimeText: 'Delivery Time: 3-7 দিন',
-  sizesRowText: 'Size: M, L, XL, XXL, 3XL, 4XL',
+  sizesRowText: 'Size: M, L, XL, XXL, 3XL',
   colorsRowText: 'Color : Black, White, Red',
   sizeChartTitle: 'সাইজ চার্ট (Ferrari Jacket Size Chart)',
   sizeChartSubtitle: 'আপনার সঠিক মাপ দেখে নিচে অর্ডার ফর্মে সাইজ সিলেক্ট করুন (সব মাপ ইঞ্চিতে)',
   sizeChartRows: DEFAULT_SIZE_CHART_ROWS,
-  sizeChartImage: sizeChartImg,
+  sizeChartImage: DEFAULT_SIZE_CHART_IMG,
   sizeChartDisplayMode: 'image',
   commitmentBadge: '⚠️ বিশেষ বিনীত অনুরোধ',
   commitmentDescription:
@@ -143,7 +144,7 @@ Ferrari Jacket টি।`,
       colorName: 'Black Ferrari Jacket',
       price: 1650,
       originalPrice: 2950,
-      image: blackImg,
+      image: DEFAULT_FERRARI_BLACK_IMG,
       altText: 'Black Ferrari Racing Jacket',
     },
     {
@@ -153,7 +154,7 @@ Ferrari Jacket টি।`,
       colorName: 'White Ferrari Jacket',
       price: 1650,
       originalPrice: 2950,
-      image: whiteImg,
+      image: DEFAULT_FERRARI_WHITE_IMG,
       altText: 'White Ferrari Racing Jacket',
     },
     {
@@ -163,7 +164,7 @@ Ferrari Jacket টি।`,
       colorName: 'Red Ferrari Jacket',
       price: 1650,
       originalPrice: 2950,
-      image: redImg,
+      image: DEFAULT_FERRARI_RED_IMG,
       altText: 'Red Ferrari Racing Jacket',
     },
   ],
@@ -176,45 +177,42 @@ export function sanitizeAndMergeSettings(parsed: any): SiteSettings {
     return DEFAULT_SITE_SETTINGS;
   }
   const banners =
-    Array.isArray(parsed.heroBanners) && parsed.heroBanners.length > 0 && !parsed.heroBanners[0]?.includes('indonesian') && !parsed.heroBanners[0]?.includes('porshibari_collection_banner')
+    Array.isArray(parsed.heroBanners) && parsed.heroBanners.length > 0
       ? parsed.heroBanners.filter(Boolean)
-      : [DEFAULT_SITE_SETTINGS.heroBannerImg];
+      : [parsed.heroBannerImg || DEFAULT_SITE_SETTINGS.heroBannerImg];
 
   const rawProducts =
     Array.isArray(parsed.products) && parsed.products.length > 0
       ? parsed.products
       : DEFAULT_SITE_SETTINGS.products;
 
-  // Check if products are still old legacy shirts (contains 'pink' or 'indonesian')
-  const isOldShirtData =
-    rawProducts.some((p: any) => p?.id === 'pink' || p?.name?.toLowerCase()?.includes('indonesian'));
+  const sanitizedProducts = rawProducts.map((p: any, idx: number) => {
+    const defaultProd =
+      DEFAULT_SITE_SETTINGS.products[idx] || DEFAULT_SITE_SETTINGS.products[0];
+    let bName = p?.banglaName || defaultProd.banglaName;
+    if (typeof bName === 'string' && bName.includes('কালা')) {
+      bName = 'Black';
+    }
+    const isBrokenImg = !p?.image || (typeof p.image === 'string' && p.image.startsWith('/images/')) || (typeof p.image === 'string' && p.image.trim() === '');
+    const validImg = isBrokenImg ? defaultProd.image : p.image;
 
-  const sanitizedProducts = isOldShirtData
-    ? DEFAULT_SITE_SETTINGS.products
-    : rawProducts.map((p: any, idx: number) => {
-        const defaultProd =
-          DEFAULT_SITE_SETTINGS.products[idx] || DEFAULT_SITE_SETTINGS.products[0];
-        let bName = p?.banglaName || defaultProd.banglaName;
-        if (typeof bName === 'string' && bName.includes('কালা')) {
-          bName = 'Black';
-        }
-        return {
-          id: p?.id || defaultProd.id,
-          name: p?.name !== undefined && p?.name !== null && p?.name !== '' ? p.name : defaultProd.name,
-          banglaName: bName,
-          colorName: p?.colorName || defaultProd.colorName,
-          price:
-            typeof p?.price === 'number'
-              ? p.price
-              : (p?.price !== undefined && !isNaN(Number(p?.price)) ? Number(p.price) : defaultProd.price),
-          originalPrice:
-            typeof p?.originalPrice === 'number'
-              ? p.originalPrice
-              : (p?.originalPrice !== undefined && !isNaN(Number(p?.originalPrice)) ? Number(p.originalPrice) : defaultProd.originalPrice),
-          image: p?.image || defaultProd.image,
-          altText: p?.altText || defaultProd.altText,
-        };
-      });
+    return {
+      id: p?.id || (defaultProd.id ? `${defaultProd.id}_${idx}` : `prod_${idx}`),
+      name: p?.name !== undefined && p?.name !== null && p?.name !== '' ? p.name : defaultProd.name,
+      banglaName: bName,
+      colorName: p?.colorName || defaultProd.colorName,
+      price:
+        typeof p?.price === 'number'
+          ? p.price
+          : (p?.price !== undefined && !isNaN(Number(p?.price)) ? Number(p.price) : defaultProd.price),
+      originalPrice:
+        typeof p?.originalPrice === 'number'
+          ? p.originalPrice
+          : (p?.originalPrice !== undefined && !isNaN(Number(p?.originalPrice)) ? Number(p.originalPrice) : defaultProd.originalPrice),
+      image: validImg,
+      altText: p?.altText || defaultProd.altText,
+    };
+  });
 
   const sanitizedFormSubmitButtonText =
     parsed.formSubmitButtonText === 'অর্ডার নিশ্চিত করতে ক্লিক করুন' || !parsed.formSubmitButtonText
@@ -355,120 +353,137 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
 
-    // 1. FIRST: Instantly save locally to localStorage with zero latency
     const localSettings: SiteSettings = {
       ...settings,
       updatedAt: nowIso,
     };
+
+    // 1. Prepare compressed / optimized settings (converting any large data URLs or base64)
+    const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.85, 800, 0.82);
+    optimizedSettings.updatedAt = nowIso;
+    (optimizedSettings as any).updatedAtMs = nowMs;
+
+    // 2. PRIMARY: Save to Central Server API & AWAIT response!
+    let serverSaveSuccess = false;
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+        body: JSON.stringify(optimizedSettings),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          serverSaveSuccess = true;
+        }
+      }
+    } catch (serverErr) {
+      console.warn('Central server save request notice:', serverErr);
+    }
+
+    // 3. Save to Firebase Firestore (cloud real-time database)
+    let firestoreSaveSuccess = false;
+    if (!isFirestoreQuotaExhausted()) {
+      try {
+        const writePromises: Promise<any>[] = [];
+        const cleanPayload = cleanFirestoreData(optimizedSettings);
+
+        // Unified master document (complete data)
+        const unifiedDocRef = doc(db, 'settings', 'site_settings');
+        writePromises.push(safeSetDocWithTimeout(unifiedDocRef, cleanPayload, 8000));
+
+        // Sub-documents for legacy listeners
+        const siteConfigPayload: any = { ...cleanPayload };
+        delete siteConfigPayload.heroBanners;
+        delete siteConfigPayload.heroBannerImg;
+        delete siteConfigPayload.products;
+        delete siteConfigPayload.sizeChartImage;
+
+        writePromises.push(safeSetDocWithTimeout(doc(db, 'settings', 'site_config'), siteConfigPayload, 8000));
+
+        if (cleanPayload.heroBanners && cleanPayload.heroBanners.length > 0) {
+          writePromises.push(
+            safeSetDocWithTimeout(
+              doc(db, 'settings', 'banners_config'),
+              {
+                heroBanners: cleanPayload.heroBanners,
+                heroBannerImg: cleanPayload.heroBannerImg || cleanPayload.heroBanners[0],
+                updatedAt: nowIso,
+                updatedAtMs: nowMs,
+              },
+              8000
+            )
+          );
+        }
+
+        if (cleanPayload.products && cleanPayload.products.length > 0) {
+          writePromises.push(
+            safeSetDocWithTimeout(
+              doc(db, 'settings', 'products_config'),
+              {
+                products: cleanPayload.products,
+                updatedAt: nowIso,
+                updatedAtMs: nowMs,
+              },
+              8000
+            )
+          );
+        }
+
+        if (cleanPayload.sizeChartImage || cleanPayload.sizeChartRows) {
+          writePromises.push(
+            safeSetDocWithTimeout(
+              doc(db, 'settings', 'sizechart_config'),
+              {
+                sizeChartImage: cleanPayload.sizeChartImage || '',
+                sizeChartRows: cleanPayload.sizeChartRows || [],
+                sizeChartTitle: cleanPayload.sizeChartTitle || '',
+                sizeChartSubtitle: cleanPayload.sizeChartSubtitle || '',
+                sizeChartDisplayMode: cleanPayload.sizeChartDisplayMode || 'image',
+                updatedAt: nowIso,
+                updatedAtMs: nowMs,
+              },
+              8000
+            )
+          );
+        }
+
+        const results = await Promise.allSettled(writePromises);
+        firestoreSaveSuccess = results.some((r) => r.status === 'fulfilled' && (r as any).value === true);
+      } catch (cloudErr) {
+        console.warn('Firestore cloud save note:', cloudErr);
+      }
+    }
+
+    // 4. Update local storage with the verified latest state
     try {
       localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(localSettings));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(optimizedSettings));
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: localSettings }));
+        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
       }
-    } catch (err) {
-      console.warn('Failed to save site settings locally', err);
-    }
+    } catch {}
 
-    // 2. Concurrently sync to central backend server API (permanent across all devices globally)
-    try {
-      fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(localSettings),
-      }).catch((apiErr) => {
-        console.warn('Backend API save warning:', apiErr);
-      });
-    } catch {
-      // ignore
-    }
-
-    // 3. Check circuit-breaker for Firestore
-    if (isFirestoreQuotaExhausted()) {
+    // Verify at least one central persistence mechanism succeeded
+    if (serverSaveSuccess || firestoreSaveSuccess) {
       return { success: true };
+    } else {
+      return {
+        success: false,
+        error: 'সার্ভার বা ডাটাবেসে সেভ করা সম্ভব হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।',
+      };
     }
-
-    // 4. Prepare optimized payload
-    const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.82, 800, 0.80);
-
-    // 5. Concurrently sync documents to Firestore with safe timeout
-    const writePromises: Promise<any>[] = [];
-
-    // Main site config document (text, prices, pixels, etc.)
-    const siteConfigPayload: any = {
-      ...optimizedSettings,
-      updatedAt: nowIso,
-      updatedAtMs: nowMs,
-    };
-    delete siteConfigPayload.heroBanners;
-    delete siteConfigPayload.heroBannerImg;
-    delete siteConfigPayload.products;
-    delete siteConfigPayload.sizeChartImage;
-
-    const siteDocRef = doc(db, 'settings', 'site_config');
-    writePromises.push(safeSetDocWithTimeout(siteDocRef, cleanFirestoreData(siteConfigPayload), 10000));
-
-    // Dedicated banners document (only write if banners exist)
-    if (optimizedSettings.heroBanners && optimizedSettings.heroBanners.length > 0) {
-      const bannersDocRef = doc(db, 'settings', 'banners_config');
-      writePromises.push(
-        safeSetDocWithTimeout(
-          bannersDocRef,
-          cleanFirestoreData({
-            heroBanners: optimizedSettings.heroBanners,
-            heroBannerImg: optimizedSettings.heroBannerImg || optimizedSettings.heroBanners[0],
-            updatedAt: nowIso,
-            updatedAtMs: nowMs,
-          }),
-          10000
-        )
-      );
-    }
-
-    // Dedicated products document
-    if (optimizedSettings.products && optimizedSettings.products.length > 0) {
-      const productsDocRef = doc(db, 'settings', 'products_config');
-      writePromises.push(
-        safeSetDocWithTimeout(
-          productsDocRef,
-          cleanFirestoreData({
-            products: optimizedSettings.products,
-            updatedAt: nowIso,
-            updatedAtMs: nowMs,
-          }),
-          10000
-        )
-      );
-    }
-
-    // Dedicated size chart document
-    if (optimizedSettings.sizeChartImage || (optimizedSettings.sizeChartRows && optimizedSettings.sizeChartRows.length > 0)) {
-      const sizeChartDocRef = doc(db, 'settings', 'sizechart_config');
-      writePromises.push(
-        safeSetDocWithTimeout(
-          sizeChartDocRef,
-          cleanFirestoreData({
-            sizeChartImage: optimizedSettings.sizeChartImage || '',
-            sizeChartRows: optimizedSettings.sizeChartRows || [],
-            sizeChartTitle: optimizedSettings.sizeChartTitle || '',
-            sizeChartSubtitle: optimizedSettings.sizeChartSubtitle || '',
-            sizeChartDisplayMode: optimizedSettings.sizeChartDisplayMode || 'image',
-            updatedAt: nowIso,
-            updatedAtMs: nowMs,
-          }),
-          10000
-        )
-      );
-    }
-
-    await Promise.allSettled(writePromises);
-    return { success: true };
   } catch (err: any) {
     if (isFirestoreQuotaError(err)) {
       markFirestoreQuotaExhausted();
     }
-    console.warn('Settings save notice:', err?.message || err);
-    return { success: true };
+    console.error('Settings save critical error:', err);
+    return { success: false, error: err?.message || 'সেভ ত্রুটি হয়েছে।' };
   }
 }
 
@@ -481,6 +496,19 @@ export function subscribeToSiteSettings(
 ): () => void {
   // Always emit local stored data first for zero startup delay
   callback(getStoredSettings());
+
+  const applyNewSettings = (incoming: any) => {
+    if (!incoming || typeof incoming !== 'object') return;
+    const merged = sanitizeAndMergeSettings(incoming);
+
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+      const incomingMs = incoming.updatedAtMs || incoming.serverUpdatedAtMs || (incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : Date.now());
+      localStorage.setItem('porshibari_settings_last_modified', String(incomingMs));
+    } catch {}
+
+    callback(merged);
+  };
 
   // Listen for same-device local events
   const handleLocalEvent = (e: Event) => {
@@ -503,18 +531,21 @@ export function subscribeToSiteSettings(
     window.addEventListener('storage', handleStorageEvent);
   }
 
-  // Fetch initial settings from server API immediately with cache-busting
+  // 1. Fetch fresh settings from central server API immediately with cache-busting
   const fetchServerSettings = async () => {
     try {
-      const res = await fetch(`/api/settings?t=${Date.now()}`);
+      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.settings && typeof data.settings === 'object' && Object.keys(data.settings).length > 0) {
-          const merged = sanitizeAndMergeSettings(data.settings);
-          try {
-            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
-          } catch {}
-          callback(merged);
+          applyNewSettings(data.settings);
         }
       }
     } catch {
@@ -524,7 +555,10 @@ export function subscribeToSiteSettings(
 
   fetchServerSettings();
 
-  // Setup Server-Sent Events (SSE) for instant cross-device live sync
+  // 2. Fast periodic polling every 3 seconds for 100% guarantee across mobile network drops
+  const pollInterval = setInterval(fetchServerSettings, 3000);
+
+  // 3. Setup Server-Sent Events (SSE) for instant cross-device live sync (< 100ms)
   let eventSource: EventSource | null = null;
   if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
     try {
@@ -533,11 +567,7 @@ export function subscribeToSiteSettings(
         try {
           const parsed = JSON.parse(event.data);
           if (parsed.type === 'settings_update' && parsed.data) {
-            const merged = sanitizeAndMergeSettings(parsed.data);
-            try {
-              localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
-            } catch {}
-            callback(merged);
+            applyNewSettings(parsed.data);
           }
         } catch {}
       };
@@ -546,76 +576,19 @@ export function subscribeToSiteSettings(
     }
   }
 
-  // Combined cloud states
-  let currentSiteConfig: any = null;
-  let currentBannersConfig: any = null;
-  let currentProductsConfig: any = null;
-  let currentSizeChartConfig: any = null;
-
-  const emitMerged = () => {
-    const cloudCombined: any = {
-      ...(currentSiteConfig || {}),
-    };
-
-    if (
-      currentBannersConfig?.heroBanners &&
-      Array.isArray(currentBannersConfig.heroBanners) &&
-      currentBannersConfig.heroBanners.length > 0
-    ) {
-      cloudCombined.heroBanners = currentBannersConfig.heroBanners;
-      cloudCombined.heroBannerImg = currentBannersConfig.heroBannerImg || currentBannersConfig.heroBanners[0];
-    }
-
-    if (
-      currentProductsConfig?.products &&
-      Array.isArray(currentProductsConfig.products) &&
-      currentProductsConfig.products.length > 0
-    ) {
-      cloudCombined.products = currentProductsConfig.products;
-    }
-
-    if (currentSizeChartConfig) {
-      if (currentSizeChartConfig.sizeChartImage !== undefined) {
-        cloudCombined.sizeChartImage = currentSizeChartConfig.sizeChartImage;
-      }
-      if (currentSizeChartConfig.sizeChartRows && Array.isArray(currentSizeChartConfig.sizeChartRows)) {
-        cloudCombined.sizeChartRows = currentSizeChartConfig.sizeChartRows;
-      }
-      if (currentSizeChartConfig.sizeChartTitle) {
-        cloudCombined.sizeChartTitle = currentSizeChartConfig.sizeChartTitle;
-      }
-      if (currentSizeChartConfig.sizeChartSubtitle) {
-        cloudCombined.sizeChartSubtitle = currentSizeChartConfig.sizeChartSubtitle;
-      }
-      if (currentSizeChartConfig.sizeChartDisplayMode) {
-        cloudCombined.sizeChartDisplayMode = currentSizeChartConfig.sizeChartDisplayMode;
-      }
-    }
-
-    const localStored = getStoredSettings();
-    const finalSettings = sanitizeAndMergeSettings({
-      ...localStored,
-      ...cloudCombined,
-    });
-
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(finalSettings));
-    } catch {}
-
-    callback(finalSettings);
-  };
-
+  // 4. Firestore real-time onSnapshot listener for unified master settings document
   const unsubscribers: (() => void)[] = [];
 
   try {
-    // 1. Listen to site_config
-    const siteConfigRef = doc(db, 'settings', 'site_config');
-    const unsubSite = onSnapshot(
-      siteConfigRef,
+    const unifiedDocRef = doc(db, 'settings', 'site_settings');
+    const unsubUnified = onSnapshot(
+      unifiedDocRef,
       (snapshot) => {
         if (snapshot.exists()) {
-          currentSiteConfig = snapshot.data();
-          emitMerged();
+          const unifiedData = snapshot.data();
+          if (unifiedData && typeof unifiedData === 'object') {
+            applyNewSettings(unifiedData);
+          }
         }
       },
       (err) => {
@@ -624,66 +597,12 @@ export function subscribeToSiteSettings(
         }
       }
     );
-    unsubscribers.push(unsubSite);
-
-    // 2. Listen to banners_config
-    const bannersRef = doc(db, 'settings', 'banners_config');
-    const unsubBanners = onSnapshot(
-      bannersRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          currentBannersConfig = snapshot.data();
-          emitMerged();
-        }
-      },
-      (err) => {
-        if (isFirestoreQuotaError(err)) {
-          markFirestoreQuotaExhausted();
-        }
-      }
-    );
-    unsubscribers.push(unsubBanners);
-
-    // 3. Listen to products_config
-    const productsRef = doc(db, 'settings', 'products_config');
-    const unsubProducts = onSnapshot(
-      productsRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          currentProductsConfig = snapshot.data();
-          emitMerged();
-        }
-      },
-      (err) => {
-        if (isFirestoreQuotaError(err)) {
-          markFirestoreQuotaExhausted();
-        }
-      }
-    );
-    unsubscribers.push(unsubProducts);
-
-    // 4. Listen to sizechart_config
-    const sizeChartRef = doc(db, 'settings', 'sizechart_config');
-    const unsubSizeChart = onSnapshot(
-      sizeChartRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          currentSizeChartConfig = snapshot.data();
-          emitMerged();
-        }
-      },
-      (err) => {
-        if (isFirestoreQuotaError(err)) {
-          markFirestoreQuotaExhausted();
-        }
-      }
-    );
-    unsubscribers.push(unsubSizeChart);
+    unsubscribers.push(unsubUnified);
   } catch (err) {
     console.warn('Could not initialize cloud settings subscriber:', err);
   }
 
-  // Refresh on window focus
+  // 5. Refresh on window focus and tab visibility change
   const handleFocus = () => {
     fetchServerSettings();
   };
@@ -693,6 +612,7 @@ export function subscribeToSiteSettings(
   }
 
   return () => {
+    clearInterval(pollInterval);
     unsubscribers.forEach((u) => {
       try {
         u();

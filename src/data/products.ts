@@ -1,6 +1,8 @@
-import blackImg from '../assets/images/ferrari_jacket_black_1790107270989.jpg';
-import whiteImg from '../assets/images/ferrari_jacket_white_1790107289257.jpg';
-import redImg from '../assets/images/ferrari_jacket_red_1790107301729.jpg';
+import {
+  DEFAULT_FERRARI_BLACK_IMG,
+  DEFAULT_FERRARI_WHITE_IMG,
+  DEFAULT_FERRARI_RED_IMG,
+} from '../utils/defaultImages';
 import { ShirtProduct, ShirtSize } from '../types';
 
 export const SHIRT_PRICE = 1650;
@@ -14,7 +16,7 @@ export const PRODUCTS: ShirtProduct[] = [
     colorName: 'Black Ferrari Jacket',
     price: SHIRT_PRICE,
     originalPrice: OLD_PRICE,
-    image: blackImg,
+    image: DEFAULT_FERRARI_BLACK_IMG,
     altText: 'Black Ferrari Racing Jacket',
   },
   {
@@ -24,7 +26,7 @@ export const PRODUCTS: ShirtProduct[] = [
     colorName: 'White Ferrari Jacket',
     price: SHIRT_PRICE,
     originalPrice: OLD_PRICE,
-    image: whiteImg,
+    image: DEFAULT_FERRARI_WHITE_IMG,
     altText: 'White Ferrari Racing Jacket',
   },
   {
@@ -34,7 +36,7 @@ export const PRODUCTS: ShirtProduct[] = [
     colorName: 'Red Ferrari Jacket',
     price: SHIRT_PRICE,
     originalPrice: OLD_PRICE,
-    image: redImg,
+    image: DEFAULT_FERRARI_RED_IMG,
     altText: 'Rosso Red Ferrari Racing Jacket',
   },
 ];
@@ -53,7 +55,6 @@ export const SIZE_CHART: SizeChartRow[] = [
   { size: 'XL', chest: '44', shoulder: '19.5', length: '29' },
   { size: 'XXL', chest: '46', shoulder: '20.5', length: '30' },
   { size: '3XL', chest: '48', shoulder: '21.5', length: '31' },
-  { size: '4XL', chest: '50', shoulder: '22.5', length: '32' },
 ];
 
 export const WHATSAPP_NUMBER = '8801673154851';

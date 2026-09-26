@@ -78,7 +78,7 @@ export const ColorSelection: React.FC<ColorSelectionProps> = ({
         {subtitle}
       </p>
 
-      <div className="flex flex-col gap-3 max-w-lg mx-auto">
+      <div className="flex flex-col gap-2.5 sm:gap-3 max-w-lg mx-auto">
         {products.map((product) => {
           const isSelected = !!selectedColors[product.id];
           const quantity = colorQuantities[product.id] || 1;
@@ -87,7 +87,7 @@ export const ColorSelection: React.FC<ColorSelectionProps> = ({
             <div
               key={product.id}
               onClick={() => handleCardClick(product.id)}
-              className={`relative bg-white rounded-xl p-3 sm:p-3.5 flex items-center gap-3 sm:gap-3.5 cursor-pointer transition-all duration-150 border select-none shadow-xs ${
+              className={`relative bg-white rounded-xl p-2.5 sm:p-3.5 flex items-center gap-2.5 sm:gap-3.5 cursor-pointer transition-all duration-150 border select-none shadow-xs ${
                 isSelected
                   ? 'border-[#075f58] ring-1 ring-[#075f58]/30 bg-emerald-50/20'
                   : 'border-neutral-200 hover:border-neutral-300'
@@ -105,7 +105,7 @@ export const ColorSelection: React.FC<ColorSelectionProps> = ({
               </div>
 
               {/* Thumbnail Image */}
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-md overflow-hidden shrink-0 border border-neutral-200 bg-neutral-100">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-md overflow-hidden shrink-0 border border-neutral-200 bg-neutral-100">
                 <img
                   src={product.image}
                   alt={product.name}

@@ -55,9 +55,27 @@ export function subscribeToAdminPassword(onPasswordChange: (password: string) =>
     window.addEventListener('storage', handleStorageEvent);
   }
 
+  // Fetch from central server API
+  const fetchServerPassword = async () => {
+    try {
+      const res = await fetch(`/api/admin-auth?_t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.password) {
+          saveLocalAdminPassword(data.password);
+          onPasswordChange(data.password);
+        }
+      }
+    } catch {}
+  };
+
+  fetchServerPassword();
+  const pollTimer = setInterval(fetchServerPassword, 8000);
+
+  let unsubscribeFirestore = () => {};
   try {
     const docRef = doc(db, 'settings', ADMIN_AUTH_DOC);
-    const unsubscribe = onSnapshot(
+    unsubscribeFirestore = onSnapshot(
       docRef,
       (docSnap) => {
         if (docSnap.exists()) {
@@ -69,31 +87,24 @@ export function subscribeToAdminPassword(onPasswordChange: (password: string) =>
           }
         }
       },
-      (err) => {
-        console.warn('Admin password cloud sync note:', err);
-      }
+      () => {}
     );
+  } catch {}
 
-    return () => {
-      unsubscribe();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('porshibari_admin_password_updated', handleLocalEvent);
-        window.removeEventListener('storage', handleStorageEvent);
-      }
-    };
-  } catch (err) {
-    console.warn('Error subscribing to admin password:', err);
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('porshibari_admin_password_updated', handleLocalEvent);
-        window.removeEventListener('storage', handleStorageEvent);
-      }
-    };
-  }
+  return () => {
+    clearInterval(pollTimer);
+    try {
+      unsubscribeFirestore();
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('porshibari_admin_password_updated', handleLocalEvent);
+      window.removeEventListener('storage', handleStorageEvent);
+    }
+  };
 }
 
 /**
- * Update Admin Password both in Firestore and LocalStorage
+ * Update Admin Password both on Central Server and LocalStorage
  */
 export async function updateAdminPassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
   const trimmed = newPassword.trim();
@@ -101,35 +112,34 @@ export async function updateAdminPassword(newPassword: string): Promise<{ succes
     return { success: false, error: 'পাসওয়ার্ড কমপক্ষে ৩ অক্ষরের হতে হবে' };
   }
 
-  try {
-    // 1. Update local storage immediately
-    saveLocalAdminPassword(trimmed);
+  // 1. Update local storage immediately
+  saveLocalAdminPassword(trimmed);
 
-    // 2. Persist to Firestore cloud database if quota healthy
+  // 2. Persist to Central Server API
+  try {
+    await fetch('/api/admin-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: trimmed }),
+    });
+  } catch {}
+
+  // 3. Background sync to Firestore if available
+  try {
     if (!isFirestoreQuotaExhausted()) {
       const docRef = doc(db, 'settings', ADMIN_AUTH_DOC);
-      await setDoc(
+      setDoc(
         docRef,
         {
           password: trimmed,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
-      );
+      ).catch(() => {});
     }
+  } catch {}
 
-    return { success: true };
-  } catch (err: any) {
-    if (isFirestoreQuotaError(err)) {
-      markFirestoreQuotaExhausted();
-      return { success: true };
-    }
-    console.warn('Error saving new admin password to cloud:', err);
-    return {
-      success: true, // Still success locally, notify cloud issue if needed
-      error: err?.message,
-    };
-  }
+  return { success: true };
 }
 
 /**

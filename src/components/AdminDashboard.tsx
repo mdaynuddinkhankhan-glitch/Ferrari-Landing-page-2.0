@@ -226,7 +226,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .filter(Boolean);
       if (list.length > 0) return list;
     }
-    return ['M', 'L', 'XL', 'XXL', '3XL', '4XL'];
+    return ['M', 'L', 'XL', 'XXL', '3XL'];
   }, [settings.sizeChartRows]);
 
   // Banner upload refs and helpers
@@ -1204,16 +1204,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onSettingsUpdate(updated);
     }
 
-    // 2. Debounced auto-save to Firestore cloud database
+    // 2. Debounced auto-save to central database
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
     autoSaveTimerRef.current = setTimeout(async () => {
       const res = await saveStoredSettings(updated);
       if (res.success) {
-        showSuccessBanner('সব পরিবর্তন স্বয়ংক্রিয়ভাবে লাইভ সেভ হয়েছে!');
+        showSuccessBanner('সব পরিবর্তন কেন্দ্রীয় ডাটাবেসে সেভ হয়েছে এবং সব ফোনে লাইভ হয়েছে!');
+      } else {
+        showErrorBanner(`সেভ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
       }
     }, 700);
+  };
+
+  const handleAddProduct = async () => {
+    lastLocalEditTimestampRef.current = Date.now();
+    const newIdx = settings.products.length + 1;
+    const defaultImg = DEFAULT_SITE_SETTINGS.products[0]?.image || 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800&auto=format&fit=crop&q=80';
+    const newProduct: ShirtProduct = {
+      id: `prod_${Date.now()}`,
+      name: `Ferrari Jacket ${newIdx}`,
+      banglaName: `কালার ${newIdx}`,
+      colorName: `Edition ${newIdx}`,
+      price: settings.products[0]?.price || 1650,
+      originalPrice: settings.products[0]?.originalPrice || 2950,
+      image: defaultImg,
+      altText: `Ferrari Racing Jacket ${newIdx}`,
+    };
+    const updatedProducts = [...settings.products, newProduct];
+    const updatedSettings: SiteSettings = {
+      ...settings,
+      products: updatedProducts,
+    };
+    setSettings(updatedSettings);
+    if (onSettingsUpdate) onSettingsUpdate(updatedSettings);
+    showSuccessBanner('নতুন প্রোডাক্ট সেভ হচ্ছে...');
+    const res = await saveStoredSettings(updatedSettings);
+    if (res.success) {
+      showSuccessBanner('নতুন প্রোডাক্ট সফলভাবে যুক্ত হয়েছে এবং সব ফোনে সাথে সাথে লাইভ হয়েছে!');
+    } else {
+      showErrorBanner(`প্রোডাক্ট যোগ ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
+    }
+  };
+
+  const handleDeleteProduct = (index: number) => {
+    if (settings.products.length <= 1) {
+      showErrorBanner('কমপক্ষে একটি প্রোডাক্ট থাকা আবশ্যক!');
+      return;
+    }
+    const targetProd = settings.products[index];
+    setConfirmModal({
+      message: `আপনি কি "${targetProd?.name || 'এই প্রোডাক্টটি'}" মুছে ফেলতে চান? এটি মুছে দিলে সব ফোন থেকে প্রোডাক্টটি তৎক্ষণাৎ সরে যাবে।`,
+      onConfirm: async () => {
+        lastLocalEditTimestampRef.current = Date.now();
+        const updatedProducts = settings.products.filter((_, i) => i !== index);
+        const updatedSettings: SiteSettings = {
+          ...settings,
+          products: updatedProducts,
+        };
+        setSettings(updatedSettings);
+        if (onSettingsUpdate) onSettingsUpdate(updatedSettings);
+        setConfirmModal(null);
+        showSuccessBanner('প্রোডাক্ট ডাটাবেস থেকে মুছে ফেলা হচ্ছে...');
+        const res = await saveStoredSettings(updatedSettings);
+        if (res.success) {
+          showSuccessBanner('প্রোডাক্ট মুছে ফেলা হয়েছে এবং সব ফোনে সাথে সাথে আপডেট হয়েছে!');
+        } else {
+          showErrorBanner(`প্রোডাক্ট মুছে ফেলতে ত্রুটি: ${res.error || 'পুনরায় চেষ্টা করুন'}`);
+        }
+      },
+    });
   };
 
   const handleProductImageUpload = async (index: number, rawDataUrl: string) => {
@@ -1246,12 +1307,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleSafeBackToStore = () => {
+  const handleSafeBackToStore = async () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    // Perform background save without blocking navigation
-    saveStoredSettings(settings).catch(console.warn);
+    try {
+      await saveStoredSettings(settings);
+    } catch (e) {
+      console.warn('Back-to-store save notice:', e);
+    }
     if (onSettingsUpdate) {
       onSettingsUpdate(settings);
     }
@@ -1349,7 +1413,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f8] text-neutral-800 flex flex-col selection:bg-[#ff146b] selection:text-white">
+    <div className="min-h-screen bg-[#f3f4f8] text-neutral-800 flex flex-col selection:bg-[#ff146b] selection:text-white w-full max-w-full overflow-x-hidden">
       {/* ===================== 3-LINE SIDEBAR DRAWER MENU ===================== */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-50 flex animate-in fade-in duration-200">
@@ -4156,13 +4220,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {activeTab === 'products' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-5 border border-neutral-200 shadow-xs">
-              <h2 className="text-lg font-bold text-neutral-900 mb-1 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-[#ff146b]" />
-                <span>Ferrari Jacket কার্ড, ছবি ও দাম এডিটর</span>
-              </h2>
-              <p className="text-xs text-neutral-500 mb-6">
-                এখানে সরাসরি যেকোনো Ferrari Jacket এর ছবি ডিভাইস থেকে আপলোড করতে পারেন, দাম পরিবর্তন করতে পারেন এবং টাইটেল পরিবর্তন করতে পারেন।
-              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <div>
+                  <h2 className="text-lg font-bold text-neutral-900 mb-1 flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-[#ff146b]" />
+                    <span>Ferrari Jacket কার্ড, ছবি ও দাম এডিটর</span>
+                  </h2>
+                  <p className="text-xs text-neutral-500">
+                    এখানে সরাসরি যেকোনো Ferrari Jacket এর ছবি ডিভাইস থেকে আপলোড করতে পারেন, দাম পরিবর্তন করতে পারেন এবং নতুন প্রোডাক্ট যোগ বা ডিলিট করতে পারেন।
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddProduct}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95 shrink-0 self-start sm:self-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>নতুন প্রোডাক্ট যোগ করুন</span>
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {settings.products.map((prod, idx) => (
@@ -4182,7 +4258,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const originalDefault = DEFAULT_SITE_SETTINGS.products[idx]?.image;
+                              const originalDefault = DEFAULT_SITE_SETTINGS.products[idx]?.image || DEFAULT_SITE_SETTINGS.products[0]?.image;
                               if (originalDefault) {
                                 handleProductChange(idx, 'image', originalDefault);
                                 showSuccessBanner('আসল পার্মানেন্ট HD ছবি রিস্টোর করা হয়েছে!');
@@ -4288,7 +4364,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <div className="pt-2 border-t border-neutral-200 flex items-center justify-between text-xs text-neutral-400">
                       <span>আইডি: {prod.id}</span>
-                      <span className="text-emerald-600 font-bold">লাইভ একটিভ</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-600 font-bold">লাইভ একটিভ</span>
+                        {settings.products.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduct(idx)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                            title="প্রোডাক্ট মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

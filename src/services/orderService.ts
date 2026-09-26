@@ -319,13 +319,17 @@ export async function saveOrderToFirestore(order: OrderConfirmation): Promise<{ 
 
   // 2. Central Server API persistence (guarantees cross-device delivery to all admin phones)
   try {
-    fetch('/api/orders', {
+    await fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        Pragma: 'no-cache',
+      },
       body: JSON.stringify(payload),
-    }).catch(() => {});
-  } catch {
-    // ignore
+    });
+  } catch (apiErr) {
+    console.warn('Central server order sync notice:', apiErr);
   }
 
   // 3. Central Cloud Firestore persistence with guaranteed timeout

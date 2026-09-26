@@ -108,7 +108,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({ order, produ
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.2 }}
-          className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-wide font-['Baloo_Da_2'] max-w-lg mx-auto"
+          className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-wide font-['Baloo_Da_2'] max-w-lg mx-auto"
         >
           অর্ডার করার জন্য ধন্যবাদ
         </motion.h1>
@@ -118,7 +118,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({ order, produ
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.3 }}
-          className="text-base sm:text-lg md:text-xl text-white/95 mt-4 sm:mt-5 max-w-md mx-auto leading-relaxed font-normal px-2 font-['Baloo_Da_2']"
+          className="text-sm sm:text-base md:text-lg text-white/95 mt-3 sm:mt-4 max-w-md mx-auto leading-relaxed font-normal px-2 font-['Baloo_Da_2']"
         >
           আমাদের একজন প্রতিনিধি খুব শীঘ্রই আপনার সাথে যোগাযোগ করে অর্ডারটি কনফার্ম করবেন।
         </motion.p>
