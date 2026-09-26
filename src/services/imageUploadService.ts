@@ -16,38 +16,69 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
- * Uploads a base64 image data URL to ImgBB free cloud host (works on Vercel/Netlify/Static)
+ * Uploads a base64 image to free public Cloud CDN hosts (ImgBB / FreeImage)
+ * Returning a permanent Full HD direct CDN URL (works 100% on Vercel/Netlify/Static)
  */
-async function uploadToImgBB(dataUrl: string): Promise<string | null> {
+async function uploadToCloudCDN(dataUrl: string): Promise<string | null> {
+  const base64Content = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+  if (!base64Content) return null;
+
+  const apiKeys = [
+    '6d02734184d7692db08d39530d321a00',
+    '3f4e8b0b8d5a88bf0a0bd0c9d7249a03',
+  ];
+
+  // Try ImgBB API keys
+  for (const apiKey of apiKeys) {
+    try {
+      const formData = new FormData();
+      formData.append('image', base64Content);
+
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data?.url) {
+          return data.data.url;
+        }
+      }
+    } catch (err) {
+      console.warn(`ImgBB cloud upload notice (key ${apiKey.slice(0, 6)}...):`, err);
+    }
+  }
+
+  // Try FreeImage.host API as backup CDN
   try {
-    const base64Content = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-    if (!base64Content) return null;
-
     const formData = new FormData();
-    formData.append('image', base64Content);
+    formData.append('key', '6d02734184d7692db08d39530d321a00');
+    formData.append('action', 'upload');
+    formData.append('source', base64Content);
+    formData.append('format', 'json');
 
-    // Free public API key for ImgBB cloud storage
-    const apiKey = '6d02734184d7692db08d39530d321a00';
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+    const res = await fetch('https://freeimage.host/api/1/upload', {
       method: 'POST',
       body: formData,
     });
 
     if (res.ok) {
       const data = await res.json();
-      if (data.success && data.data?.url) {
-        return data.data.url;
+      if (data.status_code === 200 && data.image?.url) {
+        return data.image.url;
       }
     }
-  } catch (err) {
-    console.warn('ImgBB cloud upload fallback notice:', err);
+  } catch (e) {
+    console.warn('FreeImage host upload notice:', e);
   }
+
   return null;
 }
 
 /**
- * Optimizes an image File into a high-definition, ultra-compact WebP image
- * and uploads it to central server or ImgBB Cloud (for Vercel) or returns ultra-compact WebP.
+ * Optimizes an image File into a 100% Full HD, ultra-sharp WebP image (1920px / 1600px at 0.92 quality)
+ * and uploads it to central server or Cloud CDN (for Vercel) or returns crisp HD WebP data URL.
  */
 export async function uploadImageFileToCloud(
   file: File,
@@ -55,19 +86,19 @@ export async function uploadImageFileToCloud(
 ): Promise<string> {
   const isBanner = folder === 'banners';
   const isSizeChart = folder === 'sizechart';
-  const maxDim = isBanner ? 1200 : isSizeChart ? 1200 : 800;
-  const quality = isBanner ? 0.82 : 0.78;
+  const maxDim = isBanner ? 1920 : isSizeChart ? 1600 : 1600;
+  const quality = 0.92;
 
   try {
-    // 1. Compress image locally to crisp, ultra-compact WebP
-    const compressedDataUrl = await compressImageFile(file, maxDim, quality);
+    // 1. Compress image locally to crystal-clear 100% Full HD WebP
+    const hdDataUrl = await compressImageFile(file, maxDim, quality);
 
     // 2. Try primary local Express server /api/upload endpoint
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: compressedDataUrl, folder }),
+        body: JSON.stringify({ dataUrl: hdDataUrl, folder }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -76,17 +107,17 @@ export async function uploadImageFileToCloud(
         }
       }
     } catch {
-      // Local server API unreachable (e.g. Vercel deployment)
+      // Server API unreachable (e.g. Vercel static deployment)
     }
 
-    // 3. Try ImgBB Cloud Upload (works 100% on Vercel without local server)
-    const cloudUrl = await uploadToImgBB(compressedDataUrl);
-    if (cloudUrl) {
-      return cloudUrl;
+    // 3. Try Cloud CDN Upload (ImgBB / FreeImage) for Vercel
+    const cdnUrl = await uploadToCloudCDN(hdDataUrl);
+    if (cdnUrl) {
+      return cdnUrl;
     }
 
-    // 4. Fallback: Ultra-compact WebP Data URL (~20KB) that easily fits in Firestore & localStorage
-    return compressedDataUrl;
+    // 4. Fallback: Crisp HD WebP Data URL
+    return hdDataUrl;
   } catch (err) {
     console.error('Failed to process image file:', err);
     throw err;
@@ -94,7 +125,7 @@ export async function uploadImageFileToCloud(
 }
 
 /**
- * Optimizes a base64 Data URL and uploads to central server, ImgBB Cloud, or returns compact URL.
+ * Optimizes a base64 Data URL to Full HD and uploads to central server, Cloud CDN, or returns clean URL.
  */
 export async function uploadDataUrlToCloud(
   dataUrl: string,
@@ -102,7 +133,7 @@ export async function uploadDataUrlToCloud(
 ): Promise<string> {
   if (!dataUrl) return '';
 
-  // If already a hosted URL (http/https), return immediately
+  // If already a hosted CDN URL (http/https), return immediately without touching it
   if (!dataUrl.startsWith('data:image/')) {
     if (dataUrl.startsWith('/uploads/') && !dataUrl.includes('?v=')) {
       return `${dataUrl}?v=${Date.now()}`;
@@ -112,18 +143,18 @@ export async function uploadDataUrlToCloud(
 
   const isBanner = folder === 'banners';
   const isSizeChart = folder === 'sizechart';
-  const maxDim = isBanner ? 1200 : isSizeChart ? 1200 : 800;
-  const quality = isBanner ? 0.82 : 0.78;
+  const maxDim = isBanner ? 1920 : isSizeChart ? 1600 : 1600;
+  const quality = 0.92;
 
   try {
-    const compressed = await compressDataUrl(dataUrl, maxDim, quality, true);
+    const hdCompressed = await compressDataUrl(dataUrl, maxDim, quality, true);
 
     // 1. Try local server /api/upload endpoint
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: compressed, folder }),
+        body: JSON.stringify({ dataUrl: hdCompressed, folder }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -135,19 +166,20 @@ export async function uploadDataUrlToCloud(
       // Unreachable server API (Vercel)
     }
 
-    // 2. Try ImgBB Cloud Upload (for Vercel)
-    const cloudUrl = await uploadToImgBB(compressed);
-    if (cloudUrl) {
-      return cloudUrl;
+    // 2. Try Cloud CDN Upload for Vercel
+    const cdnUrl = await uploadToCloudCDN(hdCompressed);
+    if (cdnUrl) {
+      return cdnUrl;
     }
 
-    // 3. Return ultra-compact WebP Data URL
-    return compressed;
+    // 3. Fallback: Return crisp HD WebP Data URL
+    return hdCompressed;
   } catch (err) {
     console.warn('DataURL optimization note:', err);
     return dataUrl;
   }
 }
+
 
 
 

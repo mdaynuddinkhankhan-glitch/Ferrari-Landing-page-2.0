@@ -275,16 +275,16 @@ export function cleanFirestoreData(data: any): any {
 
 export async function prepareCompressedSettings(
   settings: SiteSettings,
-  bannerDimension = 1000,
-  bannerQuality = 0.80,
-  productDimension = 700,
-  productQuality = 0.75
+  bannerDimension = 1920,
+  bannerQuality = 0.90,
+  productDimension = 1600,
+  productQuality = 0.90
 ): Promise<SiteSettings> {
   const compressedBanners: string[] = [];
   const rawBanners = settings.heroBanners || (settings.heroBannerImg ? [settings.heroBannerImg] : []);
   for (const b of rawBanners) {
     if (b && typeof b === 'string') {
-      if (b.startsWith('data:image')) {
+      if (b.startsWith('data:image') && b.length > 350000) {
         const comp = await compressDataUrl(b, bannerDimension, bannerQuality, false);
         compressedBanners.push(comp);
       } else {
@@ -296,7 +296,7 @@ export async function prepareCompressedSettings(
   const compressedProducts = await Promise.all(
     (settings.products || []).map(async (p) => {
       let img = p.image;
-      if (img && typeof img === 'string' && img.startsWith('data:image')) {
+      if (img && typeof img === 'string' && img.startsWith('data:image') && img.length > 350000) {
         img = await compressDataUrl(img, productDimension, productQuality, false);
       }
       return {
@@ -312,8 +312,8 @@ export async function prepareCompressedSettings(
     heroBanners: compressedBanners.length > 0 ? compressedBanners : settings.heroBanners,
     products: compressedProducts,
     sizeChartImage:
-      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image')
-        ? await compressDataUrl(settings.sizeChartImage, 900, 0.75, false)
+      settings.sizeChartImage && settings.sizeChartImage.startsWith('data:image') && settings.sizeChartImage.length > 350000
+        ? await compressDataUrl(settings.sizeChartImage, 1600, 0.90, false)
         : settings.sizeChartImage,
   };
 }
