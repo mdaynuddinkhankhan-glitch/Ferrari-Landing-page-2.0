@@ -4338,21 +4338,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Product Image URL Input (Direct Link or Paste) */}
                       <div className="mb-3">
                         <label className="block text-xs font-bold text-neutral-700 mb-1 flex items-center justify-between">
-                          <span>প্রোডাক্ট ছবির লিঙ্ক (Image URL / Direct Link)</span>
+                          <span>প্রোডাক্ট ছবির লিঙ্ক (Image URL / Link)</span>
                           <span className="text-[10px] text-emerald-600 font-semibold">ফাইল বা লিঙ্ক উভয়ই কাজ করবে</span>
                         </label>
-                        <input
-                          type="text"
-                          value={prod.image?.startsWith('data:image') ? '[Uploaded Image File]' : prod.image}
-                          onChange={(e) => {
-                            const val = e.target.value.trim();
-                            if (val && !val.includes('[Uploaded Image File]')) {
-                              handleProductChange(idx, 'image', val);
-                            }
-                          }}
-                          placeholder="https://... ছবির লিঙ্ক পেস্ট করুন"
-                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl outline-none focus:border-[#ff146b] font-mono text-neutral-600"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={prod.image || ''}
+                            onChange={(e) => {
+                              handleProductChange(idx, 'image', e.target.value);
+                            }}
+                            placeholder="https://... ছবির লিঙ্ক বসান বা পেস্ট করুন"
+                            className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl outline-none focus:border-[#ff146b] font-mono text-neutral-700"
+                          />
+                          {prod.image && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleProductChange(idx, 'image', '');
+                              }}
+                              className="px-2.5 py-2 bg-neutral-100 hover:bg-red-50 text-neutral-600 hover:text-red-600 rounded-xl text-xs font-bold shrink-0 cursor-pointer border border-neutral-200 transition-colors"
+                              title="লিঙ্ক ক্লিয়ার করুন"
+                            >
+                              ক্লিয়ার
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Product English Name */}
@@ -4572,18 +4583,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             }
                           }}
                         />
-                        <input
-                          type="text"
-                          value={bannerUrl?.startsWith('data:image') ? '[Uploaded Image File]' : bannerUrl}
-                          onChange={(e) => {
-                            const val = e.target.value.trim();
-                            if (val && !val.includes('[Uploaded Image File]')) {
-                              handleReplaceBanner(bIdx, val);
-                            }
-                          }}
-                          placeholder="https://... ব্যানার লিঙ্ক পেস্ট করুন"
-                          className="w-full px-2 py-1 text-[11px] bg-white border border-neutral-300 rounded-lg outline-none focus:border-[#ff146b] font-mono text-neutral-600"
-                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={bannerUrl || ''}
+                            onChange={(e) => {
+                              handleReplaceBanner(bIdx, e.target.value);
+                            }}
+                            placeholder="https://... ব্যানার লিঙ্ক পেস্ট করুন"
+                            className="w-full px-2 py-1 text-[11px] bg-white border border-neutral-300 rounded-lg outline-none focus:border-[#ff146b] font-mono text-neutral-700"
+                          />
+                          {bannerUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleReplaceBanner(bIdx, '');
+                              }}
+                              className="px-1.5 py-1 bg-neutral-100 hover:bg-red-50 text-neutral-600 hover:text-red-600 rounded-lg text-[10px] font-bold shrink-0 cursor-pointer border border-neutral-200 transition-colors"
+                              title="লিঙ্ক ক্লিয়ার করুন"
+                            >
+                              ক্লিয়ার
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}

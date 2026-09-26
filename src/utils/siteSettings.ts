@@ -512,21 +512,28 @@ export function subscribeToSiteSettings(
   const applyNewSettings = (incoming: any) => {
     if (!incoming || typeof incoming !== 'object') return;
 
-    // Only protect if THIS exact browser tab is actively editing right this second
+    // Protection 1: Active user editing lock
     const now = Date.now();
-    if (activeUserEditTimestamp > 0 && now - activeUserEditTimestamp < 3500) {
+    if (activeUserEditTimestamp > 0 && now - activeUserEditTimestamp < 5000) {
       const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
       if (incomingMs < activeUserEditTimestamp) {
         return;
       }
     }
 
+    // Protection 2: Timestamp order check - do not overwrite local newer state with stale cloud data
+    const localLastModified = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
+    const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
+    if (localLastModified > 0 && incomingMs > 0 && incomingMs < localLastModified) {
+      return;
+    }
+
     const merged = sanitizeAndMergeSettings(incoming);
 
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
-      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || Date.now();
-      localStorage.setItem('porshibari_settings_last_modified', String(incomingMs));
+      const finalMs = incomingMs || Date.now();
+      localStorage.setItem('porshibari_settings_last_modified', String(finalMs));
     } catch {}
 
     callback(merged);
