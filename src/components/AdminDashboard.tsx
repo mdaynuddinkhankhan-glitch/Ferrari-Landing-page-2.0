@@ -4335,6 +4335,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         />
                       </div>
 
+                      {/* Product Image URL Input (Direct Link or Paste) */}
+                      <div className="mb-3">
+                        <label className="block text-xs font-bold text-neutral-700 mb-1 flex items-center justify-between">
+                          <span>প্রোডাক্ট ছবির লিঙ্ক (Image URL / Direct Link)</span>
+                          <span className="text-[10px] text-emerald-600 font-semibold">ফাইল বা লিঙ্ক উভয়ই কাজ করবে</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={prod.image?.startsWith('data:image') ? '[Uploaded Image File]' : prod.image}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            if (val && !val.includes('[Uploaded Image File]')) {
+                              handleProductChange(idx, 'image', val);
+                            }
+                          }}
+                          placeholder="https://... ছবির লিঙ্ক পেস্ট করুন"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl outline-none focus:border-[#ff146b] font-mono text-neutral-600"
+                        />
+                      </div>
+
                       {/* Product English Name */}
                       <div className="mb-3">
                         <label className="block text-xs font-bold text-neutral-700 mb-1">
@@ -4527,14 +4547,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
 
                       {/* Replace button for this banner */}
-                      <div>
+                      <div className="space-y-1.5">
                         <button
                           type="button"
                           onClick={() => replaceBannerFileInputRefs.current[bIdx]?.click()}
                           className="w-full py-1.5 px-3 bg-white hover:bg-neutral-100 text-neutral-700 text-xs font-semibold rounded-lg border border-neutral-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                         >
                           <Upload className="w-3 h-3 text-neutral-500" />
-                          <span>ছবি বদলান</span>
+                          <span>ছবি ফাইল আপলোড করুন</span>
                         </button>
                         <input
                           type="file"
@@ -4551,6 +4571,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               e.target.value = '';
                             }
                           }}
+                        />
+                        <input
+                          type="text"
+                          value={bannerUrl?.startsWith('data:image') ? '[Uploaded Image File]' : bannerUrl}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            if (val && !val.includes('[Uploaded Image File]')) {
+                              handleReplaceBanner(bIdx, val);
+                            }
+                          }}
+                          placeholder="https://... ব্যানার লিঙ্ক পেস্ট করুন"
+                          className="w-full px-2 py-1 text-[11px] bg-white border border-neutral-300 rounded-lg outline-none focus:border-[#ff146b] font-mono text-neutral-600"
                         />
                       </div>
                     </div>
