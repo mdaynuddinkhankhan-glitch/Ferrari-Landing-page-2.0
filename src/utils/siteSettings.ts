@@ -355,15 +355,30 @@ export async function saveStoredSettings(settings: SiteSettings): Promise<{ succ
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
 
+    // Lock editing timestamp immediately so background polling never overwrites in-flight saves
+    markLocalUserEditing();
+    try {
+      localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
+    } catch {}
+
     const localSettings: SiteSettings = {
       ...settings,
       updatedAt: nowIso,
     };
 
-    // 1. Prepare compressed / optimized settings (converting any large data URLs or base64)
-    const optimizedSettings = await prepareCompressedSettings(localSettings, 1200, 0.85, 800, 0.82);
+    // 1. Prepare compressed / optimized settings
+    const optimizedSettings = await prepareCompressedSettings(localSettings, 1920, 0.90, 1600, 0.90);
     optimizedSettings.updatedAt = nowIso;
     (optimizedSettings as any).updatedAtMs = nowMs;
+
+    // Immediately update local storage to guarantee 0ms UI delay
+    try {
+      localStorage.setItem('porshibari_settings_last_modified', String(nowMs));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(optimizedSettings));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('porshibari_settings_updated', { detail: optimizedSettings }));
+      }
+    } catch {}
 
     // 2. PRIMARY: Save to Central Server API & AWAIT response!
     let serverSaveSuccess = false;
@@ -512,20 +527,19 @@ export function subscribeToSiteSettings(
   const applyNewSettings = (incoming: any) => {
     if (!incoming || typeof incoming !== 'object') return;
 
-    // Protection 1: Active user editing lock
+    // Protection 1: Active user editing lock (protects UI from flickering during active editing)
     const now = Date.now();
-    if (activeUserEditTimestamp > 0 && now - activeUserEditTimestamp < 5000) {
-      const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
-      if (incomingMs < activeUserEditTimestamp) {
-        return;
+    const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
+    if (activeUserEditTimestamp > 0 && now - activeUserEditTimestamp < 15000) {
+      if (incomingMs <= activeUserEditTimestamp) {
+        return; // REJECT stale cloud update while editing
       }
     }
 
     // Protection 2: Timestamp order check - do not overwrite local newer state with stale cloud data
     const localLastModified = parseInt(localStorage.getItem('porshibari_settings_last_modified') || '0', 10);
-    const incomingMs = incoming.serverUpdatedAtMs || incoming.updatedAtMs || 0;
-    if (localLastModified > 0 && incomingMs > 0 && incomingMs < localLastModified) {
-      return;
+    if (localLastModified > 0 && incomingMs > 0 && incomingMs <= localLastModified) {
+      return; // REJECT stale cloud update
     }
 
     const merged = sanitizeAndMergeSettings(incoming);
